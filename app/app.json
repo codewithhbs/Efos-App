@@ -1,0 +1,148 @@
+{
+  "expo": {
+    "name": "EFOS",
+    "slug": "efos-app",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/adaptive-icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/ic_launcher.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "app.efos.in",
+      "icon": "./assets/adaptive-icon.png",
+      "googleServicesFile": "./GoogleService-Info.plist",
+      "infoPlist": {
+        "UIBackgroundModes": [
+          "fetch"
+        ],
+        "UIUserNotificationAlertStyle": "alert"
+      },
+      "entitlements": {
+        "aps-environment": "development"
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "app.efos.in",
+      "usesCleartextTraffic": true,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "googleServicesFile": "./google-services.json",
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_EXTERNAL_STORAGE"
+      ],
+      "permissions": [
+        "POST_NOTIFICATIONS",
+        "VIBRATE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "https",
+              "host": "app.efos.in"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        }
+      ],
+      "edgeToEdgeEnabled": true,
+      "notification": {
+        "icon": "./assets/ic_launcher.webp",
+        "color": "#FB2B37",
+        "priority": "max",
+        "channels": [
+          {
+            "id": "default",
+            "name": "General Notifications",
+            "description": "General updates from EFOS",
+            "importance": "max",
+            "sound": "n_bell"
+          },
+          {
+            "id": "courses",
+            "name": "Course Updates",
+            "description": "New courses, lectures, and content updates",
+            "importance": "max",
+            "sound": "v_bell"
+          },
+          {
+            "id": "assignments",
+            "name": "Assignments & Tests",
+            "description": "Assignments and test notifications",
+            "importance": "max",
+            "sound": "n_bell"
+          },
+          {
+            "id": "liveclasses",
+            "name": "Live Class Alerts",
+            "description": "Reminders for upcoming live classes",
+            "importance": "high",
+            "sound": "v_bell",
+            "vibrationPattern": [
+              400,
+              200,
+              400
+            ]
+          },
+          {
+            "id": "announcements",
+            "name": "Announcements",
+            "description": "Important announcements from EFOS",
+            "importance": "default",
+            "sound": "n_bell"
+          }
+        ]
+      }
+    },
+    "web": {
+      "favicon": "./assets/adaptive-icon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-secure-store",
+      "expo-video",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon.png",
+          "color": "#FB2B37"
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "ios": {
+            "useFrameworks": "static",
+            "podfileProperties": {
+              "use_modular_headers!": "true"
+            }
+          }
+        }
+      ]
+    ],
+
+    "extra": {
+      "eas": {
+        "projectId": "380e3e33-6978-4d33-aad5-85dfd9dfa8e7"
+      }
+    }
+  }
+}

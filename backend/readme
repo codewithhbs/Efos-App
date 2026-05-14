@@ -1,0 +1,122 @@
+-- Create a user tokens
+CREATE TABLE user_tokens (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT NOT NULL,
+  refresh_token TEXT NOT NULL,
+  device VARCHAR(255),
+  user_agent TEXT,
+  ip_address VARCHAR(100),
+  is_revoked BOOLEAN DEFAULT FALSE,
+  expires_at DATETIME,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+//add in user
+avatarUrl feild
+fcm_token varcher 2000 defalut null
+
+forget_otp
+forget_otp_expiry
+new_password
+
+ALTER TABLE `learning_courses` ADD `featured` BOOLEAN NOT NULL DEFAULT FALSE AFTER `updated_at`;
+
+
+CREATE TABLE onboarding_slides (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+
+  title VARCHAR(255) NOT NULL,
+  description TEXT,
+
+  image_url TEXT NOT NULL,
+
+  position INT NOT NULL DEFAULT 1,  -- order of slides
+  is_active BOOLEAN DEFAULT TRUE,  -- show/hide slide
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+
+//create table for copuns
+CREATE TABLE coupons (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+
+    code VARCHAR(50) NOT NULL UNIQUE,
+
+    title VARCHAR(255) NOT NULL,
+    description TEXT NULL,
+
+    discount_type ENUM('flat','percent') NOT NULL DEFAULT 'flat',
+
+    discount_value DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+
+    max_discount_amount DECIMAL(10,2) NULL,
+
+    min_order_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+
+    usage_limit INT UNSIGNED NULL,
+    used_count INT UNSIGNED NOT NULL DEFAULT 0,
+
+    per_user_limit INT UNSIGNED NOT NULL DEFAULT 1,
+
+    applicable_type ENUM('all','course','bundle','category') NOT NULL DEFAULT 'all',
+
+    applicable_ids JSON NULL,
+
+    user_type ENUM('all','new_user','existing_user') NOT NULL DEFAULT 'all',
+
+    first_order_only TINYINT(1) NOT NULL DEFAULT 0,
+
+    starts_at DATETIME NULL,
+    expires_at DATETIME NULL,
+
+    status ENUM('active','inactive','expired') NOT NULL DEFAULT 'active',
+
+    created_by BIGINT UNSIGNED NULL,
+    updated_by BIGINT UNSIGNED NULL,
+
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_code (code),
+    INDEX idx_status (status),
+    INDEX idx_dates (starts_at, expires_at)
+);
+
+
+CREATE TABLE coupon_usages (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+
+    coupon_id BIGINT UNSIGNED NOT NULL,
+    user_id BIGINT UNSIGNED NOT NULL,
+
+    order_id BIGINT UNSIGNED NULL,
+    course_buy_id BIGINT UNSIGNED NULL,
+
+    coupon_code VARCHAR(50) NOT NULL,
+
+    original_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    final_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+
+    status ENUM('reserved','used','failed','cancelled') 
+    NOT NULL DEFAULT 'used',
+
+    used_at DATETIME NULL,
+
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_coupon_usage_coupon
+    FOREIGN KEY (coupon_id) REFERENCES coupons(id)
+    ON DELETE CASCADE,
+
+    INDEX idx_coupon (coupon_id),
+    INDEX idx_user (user_id),
+    INDEX idx_status (status),
+    INDEX idx_coupon_user (coupon_id, user_id),
+    INDEX idx_course_buy (course_buy_id)
+);

@@ -1,0 +1,1 @@
+export const API_URL='https://www.api.efos.adsdigitalmedia.com/api/v1'
