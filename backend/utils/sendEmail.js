@@ -13,7 +13,7 @@ const transporter = nodemailer.createTransport({
 
 transporter.verify((err, success) => {
   if (err) {
-    console.error("❌ Mail server error:", err.message);
+    // console.error("❌ Mail server error:", err.message);
   } else {
     console.log("✅ Mail server ready");
   }
