@@ -509,9 +509,7 @@ export function SignupScreen({ navigation }) {
 
   const handleResendRegisterOtp = async () => {
     try {
-      const r = await resendRegisterOtp(
-        registrationNumber
-      );
+      const r = await resendRegisterOtp(phone);
 
       if (r.success) {
         Alert.alert("Success", r.message);

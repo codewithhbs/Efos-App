@@ -9,11 +9,21 @@ exports.getAllBundleCourses = async (req, res) => {
 
         // All Bundles
         const [bundles] = await pool.query(`
-            SELECT id, title, slug, thumbnail, short_description, price, is_free, has_discount, discount_price, status
-            FROM course_bundles
-            ORDER BY id ASC
-        `);
-
+    SELECT
+        id,
+        title,
+        slug,
+        thumbnail,
+        short_description,
+        price,
+        is_free,
+        has_discount,
+        discount_price,
+        status
+    FROM course_bundles
+    WHERE status = 1
+    ORDER BY id ASC
+`);
         // All Bundle -> Course Mapping
         const [bundleCourses] = await pool.query(`
             SELECT
