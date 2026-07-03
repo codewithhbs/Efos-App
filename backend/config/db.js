@@ -17,7 +17,7 @@ const getPool = () => {
         : process.env.DB_LOCAL_USER,
 
       password: isProd
-        ? process.env.DB_PROD_PASSWORD
+        ? 'cdh@>pBb7U#'
         : process.env.DB_LOCAL_PASSWORD,
 
       database: isProd
