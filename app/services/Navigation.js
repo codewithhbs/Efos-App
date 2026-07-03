@@ -39,6 +39,9 @@ import AllJobs from "../pages/JobDetails/AllJobs"
 import ResumeBuilder from "../pages/ResumeBuilder/ResumeBuilder"
 import AllQuizOfChapter from "../pages/QuizScreen/AllQuizOfChapter"
 import QuizPlayScreen from "../pages/QuizScreen/QuizPlayScreen"
+import AllBundleCourse from "../pages/BundleCourses/AllBundleCourse"
+import BundleDetails from "../pages/BundleCourses/Bundledetails"
+import MyBundleCourses from "../pages/BundleCourses/MyBundleCourses"
 
 
 const Stack = createStackNavigator()
@@ -151,6 +154,16 @@ export default function Navigation() {
         <Stack.Screen name="Notifications" component={NotificationsScreen} />
         <Stack.Screen name="QuizScreen" component={AllQuizOfChapter} />
         <Stack.Screen name="QuizDetails" component={QuizPlayScreen} />
+
+
+
+        {/* Bundle */}
+        <Stack.Screen name="BundleCoursesScreen" component={AllBundleCourse} />
+        <Stack.Screen name="BundleDetails" component={BundleDetails} />
+        <Stack.Screen name="MyBundleCourses" component={MyBundleCourses} />
+
+
+
       </Stack.Navigator>
     </NavigationContainer>
   )

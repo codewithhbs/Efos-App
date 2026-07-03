@@ -20,7 +20,6 @@ API.interceptors.request.use(
     async (config) => {
         try {
             const token = await getData("accessToken");
-            console.log("Token",token)
             if (token) {
                 config.headers.Authorization = `Bearer ${token}`;
             }

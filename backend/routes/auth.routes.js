@@ -16,6 +16,10 @@ const {
     verifyForgetPasswordOtp,
     resendForgetPasswordOtp,
     updateStudentProfile,
+    verifyOtp,
+    verifyRegisterOtp,
+    resendLoginOtp,
+    resendRegisterOtp,
 } = require("../controllers/auth.controller");
 const authMiddleware = require("../middleware/authMiddleware");
 const { loginLimiter } = require("../middleware/rateLimiter");
@@ -26,7 +30,16 @@ const upload = require("../middleware/multer");
 // PUBLIC ROUTES
 // ========================
 router.post("/register", registerUser);
+router.post("/verify-register-otp", verifyRegisterOtp);
+
+router.post("/resend-login-otp", resendLoginOtp);
+
+router.post("/resend-register-otp", resendRegisterOtp);
 router.post("/login", loginLimiter, loginUser);
+router.post("/verify-otp", loginLimiter, verifyOtp);
+
+
+
 router.post("/refresh-token", refreshToken);
 router.post("/forget-password", forgetPassword);
 router.post("/verify-forget-password", verifyForgetPasswordOtp);

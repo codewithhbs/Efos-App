@@ -5,6 +5,7 @@ const cookieParser = require("cookie-parser");
 
 const app = express();
 const routes = require("./routes/index");
+const sendDltOtp = require("./utils/sendDltOtp");
 
 // ========================
 // MIDDLEWARE
@@ -36,6 +37,9 @@ app.get("/", (req, res) => {
     success: true,
     message: "API is running 🚀",
   });
+  sendDltOtp("917217619794", "996633").then((response) => {
+    console.log("DLT SMS Response:", response.data);
+  })
 });
 
 // ========================

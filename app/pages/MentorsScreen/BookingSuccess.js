@@ -77,7 +77,6 @@ export default function BookingSuccess({ route, navigation }) {
         const fetchBookingDetails = async () => {
             try {
                 const response = await API.get(`/extra/mentors-booking/details/${orderId}`);
-                console.log("Booking details", response.data);
                 setBookingDetails(response.data.data);
             } catch (e) {
                 console.log(e);

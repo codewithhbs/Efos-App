@@ -141,7 +141,6 @@ export default function JobDetail({ route, navigation }) {
         setUpdating(true);
         try {
             const res = await API.post('/auth/update-student-profile', form);
-            console.log('UpdateProfile Response:', res.data);
             if (res.data?.success) {
                 closeModal();
                 setTimeout(() => applyJob(), 400); // wait for modal to close before re-applying

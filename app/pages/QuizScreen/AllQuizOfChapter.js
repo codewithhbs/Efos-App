@@ -23,7 +23,6 @@ const AllQuizOfChapter = ({ route, navigation }) => {
     // Fetch quizzes
     const fetchQuizes = async () => {
         try {
-            console.log("route.params",courseId)
             setLoading(true);
 
             const res = await API.get(
@@ -32,7 +31,6 @@ const AllQuizOfChapter = ({ route, navigation }) => {
 
             setQuizzes(res?.data?.quizzes || []);
 
-            console.log("Quiz Response:", res.data);
         } catch (error) {
             console.log(
                 "Quiz Error:",

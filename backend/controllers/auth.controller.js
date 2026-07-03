@@ -7,6 +7,7 @@ const generateOTP = () => Math.floor(100000 + Math.random() * 900000);
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
+const sendDltOtp = require("../utils/sendDltOtp");
 
 // Ensure resume directory exists
 const resumeDir = path.join(__dirname, '../uploads/resumes');
@@ -28,6 +29,8 @@ const REFRESH_COOKIE_OPTIONS = {
 };
 
 // ─── Register ─────────────────────────────────────────────────────────────────
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 exports.registerUser = async (req, res) => {
     const connection = await pool.getConnection();
 
@@ -62,11 +65,14 @@ exports.registerUser = async (req, res) => {
             errors.password_confirmation = "Passwords do not match";
         }
 
-        if (email && !email.includes("@")) {
+        if (email && !EMAIL_REGEX.test(email.trim())) {
             errors.email = "Invalid email format";
         }
 
         if (Object.keys(errors).length > 0) {
+            await connection.rollback();
+            connection.release();
+
             return res.status(422).json({
                 success: false,
                 message: errors
@@ -78,24 +84,22 @@ exports.registerUser = async (req, res) => {
 
         // Check Existing User
         const [existingUsers] = await connection.query(
-            `SELECT id,email,phone 
-             FROM users 
+            `SELECT id, email, phone
+             FROM users
              WHERE email = ? OR phone = ?
              LIMIT 1`,
             [normalizedEmail, normalizedPhone]
         );
 
         if (existingUsers.length > 0) {
-            const existing = existingUsers[0];
-
             await connection.rollback();
+            connection.release();
 
+            // Generic message: don't reveal which field matched (avoids
+            // account enumeration).
             return res.status(409).json({
                 success: false,
-                message: `An account with this ${existing.email === normalizedEmail
-                    ? "Email"
-                    : "Phone Number"
-                    } already exists.`
+                message: "An account with this email or phone number already exists."
             });
         }
 
@@ -107,7 +111,7 @@ exports.registerUser = async (req, res) => {
 
         const [userResult] = await connection.query(
             `INSERT INTO users
-            (name,email,phone,password,created_at,updated_at,avatarUrl,fcm_token)
+            (name, email, phone, password, created_at, updated_at, avatarUrl, fcm_token)
             VALUES (?, ?, ?, ?, NOW(), NOW(), ?, ?)`,
             [
                 name.trim(),
@@ -115,37 +119,34 @@ exports.registerUser = async (req, res) => {
                 normalizedPhone,
                 hashedPassword,
                 avatarUrl,
-                fcm_token || null
+                fcm_token?.trim() || null
             ]
         );
 
         const userId = userResult.insertId;
 
         // Generate Registration Number
-        const [lastStudent] = await connection.query(
-            `SELECT id, registration_number
+        // Lock all EFOS-prefixed rows and take the true numeric max, not just
+        // the most recently inserted row (which may be malformed/non-EFOS).
+        const [studentRows] = await connection.query(
+            `SELECT registration_number
              FROM students
-             ORDER BY id DESC
-             LIMIT 1
+             WHERE registration_number LIKE 'EFOS%'
              FOR UPDATE`
         );
 
-        let nextNumber = 1;
+        let maxNumber = 0;
 
-        if (
-            lastStudent.length &&
-            lastStudent[0].registration_number
-        ) {
-            const match =
-                lastStudent[0].registration_number.match(/EFOS(\d+)/);
-
+        for (const row of studentRows) {
+            const match = row.registration_number?.match(/^EFOS(\d+)$/);
             if (match) {
-                nextNumber = parseInt(match[1]) + 1;
+                const n = parseInt(match[1], 10);
+                if (n > maxNumber) maxNumber = n;
             }
         }
 
         const registrationNumber =
-            "EFOS" + String(nextNumber).padStart(3, "0");
+            "EFOS" + String(maxNumber + 1).padStart(3, "0");
 
         // Create Student
         await connection.query(
@@ -169,53 +170,49 @@ exports.registerUser = async (req, res) => {
                 name.trim(),
                 normalizedPhone,
                 normalizedEmail,
-                state || null,
-                district || null,
-                looking_for || null,
+                state?.trim() || null,
+                district?.trim() || null,
+                looking_for?.trim() || null,
                 registrationNumber,
                 agree_terms ? 1 : 0
             ]
         );
 
-        // Tokens
-        const accessToken = signToken({
-            id: userId,
-            email: normalizedEmail
-        });
-
-        const refreshToken = signRefreshToken({
-            id: userId
-        });
-
-        const device = req.headers["user-agent"] || "unknown";
-        const ip = req.ip;
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
         await connection.query(
-            `INSERT INTO user_tokens
-            (
-                user_id,
-                refresh_token,
-                device,
-                user_agent,
-                ip_address,
-                expires_at
-            )
-            VALUES
-            (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
-            [userId, refreshToken, device, device, ip]
+            `UPDATE users
+             SET register_otp = ?,
+                 register_otp_expiry = ?
+             WHERE id = ?`,
+            [otp, otpExpiry, userId]
         );
+
+        // Normalize to 10-digit local number, then prefix with country code.
+        // (Old check `startsWith("91")` wrongly skipped prefixing for any
+        // 10-digit number that happened to start with 91, e.g. 9198xxxxx.)
+        const localDigits = normalizedPhone.replace(/\D/g, "").slice(-10);
+        const mobile = `91${localDigits}`;
+
+        const sms = await sendDltOtp(mobile, otp);
+
+        if (!sms.success) {
+            await connection.rollback();
+            connection.release();
+
+            return res.status(500).json({
+                success: false,
+                message: "Unable to send OTP. Please try again."
+            });
+        }
 
         await connection.commit();
         connection.release();
 
-        res.cookie("accessToken", accessToken, ACCESS_COOKIE_OPTIONS);
-        res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
-
         return res.status(201).json({
             success: true,
             message: "Account created successfully!",
-            accessToken,
-            refreshToken,
             user: {
                 id: userId,
                 name: name.trim(),
@@ -234,6 +231,287 @@ exports.registerUser = async (req, res) => {
             success: false,
             message: "Something went wrong while creating your account."
         });
+    }
+};
+exports.verifyRegisterOtp = async (req, res) => {
+    try {
+        const { registration_number, otp, fcm_token } = req.body;
+
+        if (!registration_number || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Registration number and OTP are required."
+            });
+        }
+
+        // Find user with student details
+        const [[user]] = await pool.query(
+            `SELECT
+                u.*,
+                s.registration_number
+            FROM users u
+            INNER JOIN students s
+                ON s.user_id = u.id
+            WHERE s.registration_number = ?
+            LIMIT 1`,
+            [registration_number]
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        // Check OTP
+        if (!user.register_otp || user.register_otp !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP."
+            });
+        }
+
+        // Check Expiry
+        if (
+            !user.register_otp_expiry ||
+            new Date(user.register_otp_expiry) < new Date()
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP has expired."
+            });
+        }
+
+        // Generate Tokens
+        const accessToken = signToken({
+            id: user.id,
+            email: user.email
+        });
+
+        const refreshToken = signRefreshToken({
+            id: user.id
+        });
+
+        const device = req.headers["user-agent"] || "Unknown";
+
+        const ip =
+            req.headers["x-forwarded-for"] ||
+            req.socket.remoteAddress ||
+            req.ip;
+
+        // Clear OTP + Update FCM Token
+        await pool.query(
+            `UPDATE users
+             SET
+                register_otp = NULL,
+                register_otp_expiry = NULL,
+                fcm_token = ?
+             WHERE id = ?`,
+            [
+                fcm_token || user.fcm_token,
+                user.id
+            ]
+        );
+
+        // Save Refresh Token
+        await pool.query(
+            `INSERT INTO user_tokens
+            (
+                user_id,
+                refresh_token,
+                device,
+                user_agent,
+                ip_address,
+                expires_at
+            )
+            VALUES
+            (
+                ?, ?, ?, ?, ?,
+                DATE_ADD(NOW(), INTERVAL 7 DAY)
+            )`,
+            [
+                user.id,
+                refreshToken,
+                device,
+                device,
+                ip
+            ]
+        );
+
+        res.cookie(
+            "accessToken",
+            accessToken,
+            ACCESS_COOKIE_OPTIONS
+        );
+
+        res.cookie(
+            "refreshToken",
+            refreshToken,
+            REFRESH_COOKIE_OPTIONS
+        );
+
+        delete user.password;
+        delete user.register_otp;
+        delete user.register_otp_expiry;
+
+        return res.json({
+            success: true,
+            message: "Registration verified successfully.",
+            accessToken,
+            refreshToken,
+            user
+        });
+
+    } catch (error) {
+
+        console.error("[verifyRegisterOtp]", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong."
+        });
+
+    }
+};
+
+exports.resendLoginOtp = async (req, res) => {
+    try {
+        const { registration_number } = req.body;
+
+        if (!registration_number) {
+            return res.status(400).json({
+                success: false,
+                message: "Registration number is required."
+            });
+        }
+
+        const [[user]] = await pool.query(
+            `SELECT u.id,u.phone
+             FROM users u
+             INNER JOIN students s
+             ON s.user_id=u.id
+             WHERE s.phone=?
+             LIMIT 1`,
+            [registration_number]
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        const expiry = new Date(Date.now() + 10 * 60 * 1000);
+
+        await pool.query(
+            `UPDATE users
+             SET login_otp=?,
+                 login_otp_expiry=?
+             WHERE id=?`,
+            [otp, expiry, user.id]
+        );
+
+        const mobile = user.phone.startsWith("91")
+            ? user.phone
+            : `91${user.phone}`;
+
+        const sms = await sendDltOtp(mobile, otp);
+
+        if (!sms.success) {
+            return res.status(500).json({
+                success: false,
+                message: "Unable to send OTP."
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "OTP sent successfully."
+        });
+
+    } catch (err) {
+
+        console.error("[resendLoginOtp]", err);
+
+        return res.status(500).json({
+            success: false,
+            message: "Server error."
+        });
+
+    }
+};
+
+exports.resendRegisterOtp = async (req, res) => {
+    try {
+        const { registration_number } = req.body;
+
+        if (!registration_number) {
+            return res.status(400).json({
+                success: false,
+                message: "Registration number is required."
+            });
+        }
+
+        const [[user]] = await pool.query(
+            `SELECT u.id,u.phone
+             FROM users u
+             INNER JOIN students s
+             ON s.user_id=u.id
+             WHERE s.phone=?
+             LIMIT 1`,
+            [registration_number]
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found."
+            });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        const expiry = new Date(Date.now() + 10 * 60 * 1000);
+
+        await pool.query(
+            `UPDATE users
+             SET register_otp=?,
+                 register_otp_expiry=?
+             WHERE id=?`,
+            [otp, expiry, user.id]
+        );
+
+        const mobile = user.phone.startsWith("91")
+            ? user.phone
+            : `91${user.phone}`;
+
+        const sms = await sendDltOtp(mobile, otp);
+
+        if (!sms.success) {
+            return res.status(500).json({
+                success: false,
+                message: "Unable to send OTP."
+            });
+        }
+
+        return res.json({
+            success: true,
+            message: "OTP sent successfully."
+        });
+
+    } catch (err) {
+
+        console.error("[resendRegisterOtp]", err);
+
+        return res.status(500).json({
+            success: false,
+            message: "Server error."
+        });
+
     }
 };
 
@@ -442,12 +720,12 @@ exports.resendForgetPasswordOtp = async (req, res) => {
 // ─── Login ────────────────────────────────────────────────────────────────────
 exports.loginUser = async (req, res) => {
     try {
-        const { registration_number, password } = req.body;
+        const { registration_number } = req.body;
 
-        if (!registration_number?.trim() || !password) {
+        if (!registration_number?.trim()) {
             return res.status(400).json({
                 success: false,
-                message: "Registration number and password are required.",
+                message: "Registration number is required.",
             });
         }
 
@@ -457,51 +735,154 @@ exports.loginUser = async (req, res) => {
         );
 
         if (!user) {
-            return res.status(401).json({
+            return res.status(404).json({
                 success: false,
-                message: "No account found with that registration number.",
+                message: "No account found with this registration number.",
             });
         }
 
-        const isMatch = await bcrypt.compare(password, user.password);
-        if (!isMatch) {
-            return res.status(401).json({
-                success: false,
-                message: "Incorrect password. Please try again.",
-            });
-        }
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-        const accessToken = signToken({ id: user.id });
-        const refreshToken = signRefreshToken({ id: user.id });
-
-        const device = req.headers["user-agent"] || "unknown";
-        const ip = req.ip;
+        const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 Minutes
 
         await pool.query(
-            `INSERT INTO user_tokens (user_id, refresh_token, device, user_agent, ip_address, expires_at)
-             VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
-            [user.id, refreshToken, device, device, ip]
+            `UPDATE users
+             SET login_otp = ?, login_otp_expiry = ?
+             WHERE id = ?`,
+            [otp, expiry, user.id]
         );
 
-        res.cookie("accessToken", accessToken, ACCESS_COOKIE_OPTIONS);
-        res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
+        const mobile =
+            user.phone.startsWith("91")
+                ? user.phone
+                : `91${user.phone}`;
+
+        const sms = await sendDltOtp(mobile, otp);
+
+        if (!sms.success) {
+            return res.status(500).json({
+                success: false,
+                message: "Unable to send OTP.",
+            });
+        }
 
         return res.json({
-            accessToken,
-            user,
-            refreshToken,
             success: true,
-            message: "Logged in successfully.",
+            message: "OTP sent successfully.",
         });
 
     } catch (error) {
         console.error("[loginUser]", error);
+
         return res.status(500).json({
             success: false,
-            message: "Unable to log in right now. Please try again shortly.",
+            message: "Something went wrong.",
         });
     }
 };
+
+exports.verifyOtp = async (req, res) => {
+    try {
+
+        const { registration_number, otp } = req.body;
+
+        if (!registration_number || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Registration number and OTP are required.",
+            });
+        }
+
+        const [[user]] = await pool.query(
+            `SELECT *
+             FROM users
+             WHERE phone = ?
+             LIMIT 1`,
+            [registration_number]
+        );
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found.",
+            });
+        }
+
+        if (!user.login_otp || user.login_otp !== otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP.",
+            });
+        }
+
+        if (new Date(user.login_otp_expiry) < new Date()) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP has expired.",
+            });
+        }
+
+        // Clear OTP
+        await pool.query(
+            `UPDATE users
+             SET login_otp = NULL,
+                 login_otp_expiry = NULL
+             WHERE id = ?`,
+            [user.id]
+        );
+
+        // JWT Tokens
+        const accessToken = signToken({ id: user.id });
+        const refreshToken = signRefreshToken({ id: user.id });
+
+        const device = req.headers["user-agent"] || "Unknown";
+        const ip =
+            req.headers["x-forwarded-for"] ||
+            req.socket.remoteAddress ||
+            req.ip;
+
+        await pool.query(
+            `INSERT INTO user_tokens
+            (user_id, refresh_token, device, user_agent, ip_address, expires_at)
+            VALUES
+            (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
+            [
+                user.id,
+                refreshToken,
+                device,
+                device,
+                ip,
+            ]
+        );
+
+        res.cookie("accessToken", accessToken, ACCESS_COOKIE_OPTIONS);
+
+        res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
+
+        delete user.password;
+        delete user.login_otp;
+        delete user.login_otp_expiry;
+
+        return res.json({
+            success: true,
+            message: "Login successful.",
+            accessToken,
+            refreshToken,
+            user,
+        });
+
+    } catch (error) {
+
+        console.error("[verifyOtp]", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong.",
+        });
+
+    }
+};
+
 
 // ─── Update Fcm token ────────────────────────────────────────────────────────────────────
 exports.updateFcmToken = async (req, res) => {
@@ -940,8 +1321,7 @@ exports.updateStudentProfile = async (req, res) => {
             passport,
             relocation
         } = req.body;
-        console.log(req.body)
-        console.log(req.file)
+
 
         // Validation
         const errors = {};

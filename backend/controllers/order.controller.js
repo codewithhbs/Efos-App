@@ -1384,11 +1384,6 @@ exports.getMyAllApplications = async (req, res) => {
     }
 };
 
-
-
-
-
-
 exports.getAllMyPayments = async (req, res) => {
     try {
         const userId = req.user.id;
@@ -1616,3 +1611,4 @@ exports.getAllMyPayments = async (req, res) => {
         });
     }
 };
+

@@ -92,21 +92,21 @@ function Field({
   const bAnim = useRef(new Animated.Value(0)).current;
 
   const onFocus = () => {
-  setFocused(true);
+    setFocused(true);
 
-  Animated.timing(bAnim, {
-    toValue: 1,
-    duration: 180,
-    useNativeDriver: false,
-  }).start();
+    Animated.timing(bAnim, {
+      toValue: 1,
+      duration: 180,
+      useNativeDriver: false,
+    }).start();
 
-  setTimeout(() => {
-    scrollRef?.current?.scrollTo?.({
-      y: scrollY,
-      animated: true,
-    });
-  }, 150);
-};
+    setTimeout(() => {
+      scrollRef?.current?.scrollTo?.({
+        y: scrollY,
+        animated: true,
+      });
+    }, 150);
+  };
   const onBlur = () => {
     setFocused(false);
     Animated.timing(bAnim, { toValue: 0, duration: 180, useNativeDriver: false }).start();
@@ -255,31 +255,84 @@ function Div() {
 // ════════════════════════════════════════════════════════════
 export function LoginScreen({ navigation }) {
   const [reg, setReg] = useState("");
-  const [pass, setPass] = useState("");
-  const [showPass, setShowPass] = useState(false);
+
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState({});
-  const { login } = useAuthStore();
+  const { login, verifyOtp, resendLoginOtp, } = useAuthStore();
   const scrollRef = useRef(null);
-
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
   const validate = () => {
     const e = {};
-    if (!reg.trim()) e.reg = "Registration number required";
-    if (!pass.trim()) e.pass = "Password required";
-    setErrors(e);
-    return !Object.keys(e).length;
-  };
 
+    if (!reg.trim()) {
+      e.reg = "Registration number required";
+    }
+
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
   const handleLogin = async () => {
     Keyboard.dismiss();
+
     if (!validate()) return;
+
     setLoading(true);
+
     try {
-      const r = await login({ registration_number: reg.trim(), password: pass.trim() });
-      if (r.success) navigation.replace("Main");
-      else Alert.alert("Login Failed", r.message || "Invalid credentials");
-    } catch { Alert.alert("Error", "Something went wrong."); }
-    finally { setLoading(false); }
+      const r = await login(reg.trim());
+
+      if (r.success) {
+        setOtpSent(true);
+
+        Alert.alert(
+          "OTP Sent",
+          "OTP has been sent to your registered mobile number."
+        );
+      } else {
+        Alert.alert("Login Failed", r.message);
+      }
+    } catch (error) {
+      Alert.alert("Error", "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      const r = await resendLoginOtp(reg.trim());
+
+      if (r.success) {
+        Alert.alert("Success", r.message);
+      } else {
+        Alert.alert("Error", r.message);
+      }
+    } catch {
+      Alert.alert("Error", "Unable to resend OTP.");
+    }
+  };
+  const handleVerifyOtp = async () => {
+    if (!otp.trim()) {
+      Alert.alert("OTP Required", "Please enter OTP.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const r = await verifyOtp(reg.trim(), otp.trim());
+
+      if (r.success) {
+        navigation.replace("Main");
+      } else {
+        Alert.alert("Verification Failed", r.message);
+      }
+    } catch (e) {
+      Alert.alert("Error", "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -290,31 +343,90 @@ export function LoginScreen({ navigation }) {
           <Brand title="Welcome back" sub="Sign in to continue your journey" />
 
           <View style={s.card}>
-            <Field
-              icon="id-card-outline" placeholder="Registration Number"
-              keyboardType="phone-pad" value={reg}
-              onChangeText={(t) => { setReg(t); if (errors.reg) setErrors({ ...errors, reg: null }); }}
-              error={errors.reg}
-              scrollRef={scrollRef} scrollY={0}
-            />
-            <Field
-              icon="lock-closed-outline" placeholder="Password"
-              secureTextEntry={!showPass} value={pass}
-              onChangeText={(t) => { setPass(t); if (errors.pass) setErrors({ ...errors, pass: null }); }}
-              error={errors.pass}
-              scrollRef={scrollRef} scrollY={80}
-              rightEl={
-                <TouchableOpacity onPress={() => setShowPass(!showPass)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Ionicons name={showPass ? "eye-off" : "eye"} size={17} color={C.textLight} />
+            {!otpSent ? (
+              <Field
+                icon="id-card-outline"
+                placeholder="Registration Number"
+                keyboardType="phone-pad"
+                value={reg}
+                onChangeText={(t) => {
+                  setReg(t);
+                  if (errors.reg) setErrors({ ...errors, reg: null });
+                }}
+                error={errors.reg}
+                scrollRef={scrollRef}
+                scrollY={0}
+              />
+            ) : (
+              <>
+                <Text
+                  style={{
+                    color: "#666",
+                    marginBottom: 12,
+                    textAlign: "center",
+                  }}
+                >
+                  OTP has been sent to your registered mobile number.
+                </Text>
+
+                <Field
+                  icon="key-outline"
+                  placeholder="Enter OTP"
+                  keyboardType="number-pad"
+                  value={otp}
+                  onChangeText={setOtp}
+                  scrollRef={scrollRef}
+                  scrollY={0}
+                />
+
+                <TouchableOpacity
+                  onPress={() => {
+                    setOtp("");
+                    setOtpSent(false);
+                  }}
+                  style={{ alignSelf: "center", marginTop: 12 }}
+                >
+                  <Text
+                    style={{
+                      color: "#0A84FF",
+                      fontWeight: "600",
+                    }}
+                  >
+                    Change Registration Number
+                  </Text>
                 </TouchableOpacity>
-              }
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "center",
+                    marginTop: 15,
+                  }}
+                >
+                  <Text style={{ color: "#666" }}>
+                    Didn't receive OTP?
+                  </Text>
+
+                  <TouchableOpacity
+                    onPress={handleResendOtp}
+                    style={{ marginLeft: 5 }}
+                  >
+                    <Text
+                      style={{
+                        color: C.primary,
+                        fontWeight: "700",
+                      }}
+                    >
+                      Resend OTP
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+            <Btn
+              label={otpSent ? "Verify OTP" : "Send OTP"}
+              onPress={otpSent ? handleVerifyOtp : handleLogin}
+              loading={loading}
             />
-
-            <TouchableOpacity style={s.forgotBtn} onPress={() => navigation.navigate("ForgotPassword")}>
-              <Text style={s.forgotTxt}>Forgot password?</Text>
-            </TouchableOpacity>
-
-            <Btn label="Sign In" onPress={handleLogin} loading={loading} />
 
 
           </View>
@@ -343,8 +455,11 @@ export function SignupScreen({ navigation }) {
   const [showPass, setShowPass] = useState(false);
   const [showPassConf, setShowPassConf] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [otpSent, setOtpSent] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [registrationNumber, setRegistrationNumber] = useState("");
   const [errors, setErrors] = useState({});
-  const { register } = useAuthStore();
+  const { register, verifyRegisterOtp, resendRegisterOtp, } = useAuthStore();
   const scrollRef = useRef(null);
 
   const validate = () => {
@@ -360,21 +475,78 @@ export function SignupScreen({ navigation }) {
 
   const handleRegister = async () => {
     Keyboard.dismiss();
+
     if (!validate()) return;
+
     setLoading(true);
+
     try {
       const r = await register({
-        name: name.trim(), email: email.trim().toLowerCase(),
-        phone: phone.trim(), password: pass, password_confirmation: passConf,
+        name: name.trim(),
+        email: email.trim().toLowerCase(),
+        phone: phone.trim(),
+        password: pass,
+        password_confirmation: passConf,
       });
-      if (r.success) Alert.alert("Account Created!", "Please sign in.", [
-        { text: "Sign In", onPress: () => navigation.replace("Login") },
-      ]);
-      else Alert.alert("Registration Failed", r.message || "Please try again");
-    } catch { Alert.alert("Error", "Something went wrong."); }
-    finally { setLoading(false); }
+
+      if (r.success) {
+        setRegistrationNumber(r.registration_number);
+        setOtpSent(true);
+
+        Alert.alert(
+          "OTP Sent",
+          "OTP has been sent to your registered mobile number."
+        );
+      } else {
+        Alert.alert("Registration Failed", r.message);
+      }
+    } catch (e) {
+      Alert.alert("Error", "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
   };
 
+  const handleResendRegisterOtp = async () => {
+    try {
+      const r = await resendRegisterOtp(
+        registrationNumber
+      );
+
+      if (r.success) {
+        Alert.alert("Success", r.message);
+      } else {
+        Alert.alert("Error", r.message);
+      }
+    } catch {
+      Alert.alert("Error", "Unable to resend OTP.");
+    }
+  };
+  const handleVerifyOtp = async () => {
+    if (!otp.trim()) {
+      Alert.alert("OTP Required", "Please enter OTP.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const r = await verifyRegisterOtp(
+        registrationNumber,
+        otp.trim()
+      );
+
+      if (r.success) {
+        navigation.replace("Main");
+      } else {
+        Alert.alert("Verification Failed", r.message);
+      }
+    } catch (e) {
+      Alert.alert("Error", "Something went wrong.");
+    } finally {
+      setLoading(false);
+    }
+  };
   const sc = (y) => () => scrollRef.current?.scrollTo({ y, animated: true });
 
   return (
@@ -399,48 +571,161 @@ export function SignupScreen({ navigation }) {
               <Brand title="Create account" sub="Start your learning journey today" />
 
               <View style={s.card}>
-                <Field
-                  icon="person-outline" placeholder="Full Name" value={name}
-                  onChangeText={(t) => { setName(t); if (errors.name) setErrors({ ...errors, name: null }); }}
-                  error={errors.name} scrollRef={scrollRef} scrollY={0}
-                />
-                <Field
-                  icon="mail-outline" placeholder="Email Address"
-                  keyboardType="email-address" value={email}
-                  onChangeText={(t) => { setEmail(t); if (errors.email) setErrors({ ...errors, email: null }); }}
-                  error={errors.email} scrollRef={scrollRef} scrollY={60}
-                />
-                <Field
-                  icon="call-outline" placeholder="Phone Number"
-                  keyboardType="phone-pad" value={phone}
-                  onChangeText={(t) => { setPhone(t); if (errors.phone) setErrors({ ...errors, phone: null }); }}
-                  error={errors.phone} scrollRef={scrollRef} scrollY={130}
-                />
-                <Field
-                  icon="lock-closed-outline" placeholder="Create Password"
-                  secureTextEntry={!showPass} value={pass}
-                  onChangeText={(t) => { setPass(t); if (errors.pass) setErrors({ ...errors, pass: null }); }}
-                  error={errors.pass} scrollRef={scrollRef} scrollY={210}
-                  rightEl={
-                    <TouchableOpacity onPress={() => setShowPass(!showPass)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <Ionicons name={showPass ? "eye-off" : "eye"} size={17} color={C.textLight} />
-                    </TouchableOpacity>
-                  }
-                />
-                <StrBar password={pass} />
-                <Field
-                  icon="shield-checkmark-outline" placeholder="Confirm Password"
-                  secureTextEntry={!showPassConf} value={passConf}
-                  onChangeText={(t) => { setPassConf(t); if (errors.passConf) setErrors({ ...errors, passConf: null }); }}
-                  error={errors.passConf} scrollRef={scrollRef} scrollY={300}
-                  rightEl={
-                    <TouchableOpacity onPress={() => setShowPassConf(!showPassConf)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <Ionicons name={showPassConf ? "eye-off" : "eye"} size={17} color={C.textLight} />
-                    </TouchableOpacity>
-                  }
-                />
+                {!otpSent ? (
+                  <>
+                    <Field
+                      icon="person-outline"
+                      placeholder="Full Name"
+                      value={name}
+                      onChangeText={(t) => {
+                        setName(t);
+                        if (errors.name)
+                          setErrors({ ...errors, name: null });
+                      }}
+                      error={errors.name}
+                    />
 
-                <Btn label="Create Account" onPress={handleRegister} loading={loading} />
+                    <Field
+                      icon="mail-outline"
+                      placeholder="Email Address"
+                      keyboardType="email-address"
+                      value={email}
+                      onChangeText={(t) => {
+                        setEmail(t);
+                        if (errors.email)
+                          setErrors({ ...errors, email: null });
+                      }}
+                      error={errors.email}
+                    />
+
+                    <Field
+                      icon="call-outline"
+                      placeholder="Phone Number"
+                      keyboardType="phone-pad"
+                      value={phone}
+                      onChangeText={(t) => {
+                        setPhone(t);
+                        if (errors.phone)
+                          setErrors({ ...errors, phone: null });
+                      }}
+                      error={errors.phone}
+                    />
+
+                    <Field
+                      icon="lock-closed-outline"
+                      placeholder="Create Password"
+                      secureTextEntry={!showPass}
+                      value={pass}
+                      onChangeText={(t) => {
+                        setPass(t);
+                        if (errors.pass)
+                          setErrors({ ...errors, pass: null });
+                      }}
+                      error={errors.pass}
+                      rightEl={
+                        <TouchableOpacity
+                          onPress={() => setShowPass(!showPass)}
+                        >
+                          <Ionicons
+                            name={showPass ? "eye-off" : "eye"}
+                            size={18}
+                            color={C.textLight}
+                          />
+                        </TouchableOpacity>
+                      }
+                    />
+
+                    <StrBar password={pass} />
+
+                    <Field
+                      icon="shield-checkmark-outline"
+                      placeholder="Confirm Password"
+                      secureTextEntry={!showPassConf}
+                      value={passConf}
+                      onChangeText={(t) => {
+                        setPassConf(t);
+                        if (errors.passConf)
+                          setErrors({ ...errors, passConf: null });
+                      }}
+                      error={errors.passConf}
+                      rightEl={
+                        <TouchableOpacity
+                          onPress={() =>
+                            setShowPassConf(!showPassConf)
+                          }
+                        >
+                          <Ionicons
+                            name={
+                              showPassConf ? "eye-off" : "eye"
+                            }
+                            size={18}
+                            color={C.textLight}
+                          />
+                        </TouchableOpacity>
+                      }
+                    />
+
+                    <Btn
+                      label="Create Account"
+                      onPress={handleRegister}
+                      loading={loading}
+                    />
+                  </>
+                ) : (
+                  <>
+                    <Text
+                      style={{
+                        textAlign: "center",
+                        color: "#666",
+                        marginBottom: 20,
+                        lineHeight: 22,
+                      }}
+                    >
+                      OTP has been sent to your registered mobile number.
+                    </Text>
+
+                    <Field
+                      icon="key-outline"
+                      placeholder="Enter OTP"
+                      keyboardType="number-pad"
+                      value={otp}
+                      onChangeText={setOtp}
+                    />
+
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        justifyContent: "center",
+                        marginTop: 15,
+                      }}
+                    >
+                      <Text style={{ color: "#666" }}>
+                        Didn't receive OTP?
+                      </Text>
+
+                      <TouchableOpacity
+                        onPress={handleResendRegisterOtp}
+                        style={{ marginLeft: 5 }}
+                      >
+                        <Text
+                          style={{
+                            color: C.primary,
+                            fontWeight: "700",
+                          }}
+                        >
+                          Resend OTP
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ height: 18 }} />
+
+                    <Btn
+                      label="Verify OTP"
+                      onPress={handleVerifyOtp}
+                      loading={loading}
+                    />
+                  </>
+                )}
 
               </View>
 

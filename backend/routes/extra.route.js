@@ -1,10 +1,16 @@
 const express = require("express");
-const { getOnBoardingSlides, getLearningCourses, getAppEvents, getLearningCoursesViaId } = require("../controllers/extra.controller");
+const { getOnBoardingSlides, getLearningCourses, getAppEvents, getLearningCoursesViaId, createOnboardingSlide, updateOnboardingSlide, deleteOnboardingSlide } = require("../controllers/extra.controller");
 const { getAllLessonsChapters, getVideosByLessonId, getAllMentors, getOneMentor, getMentorAvailableSlots, verifyBookingPayment, bookSession, getAllMentorsCategories, getMyBookingsDetails, getAllQuizes } = require("../controllers/course");
 const router = express.Router();
 const authMiddleware = require("../middleware/authMiddleware");
+const upload = require("../middleware/multer");
 
 router.get("/onboard-slides", getOnBoardingSlides)
+router.post("/onboard-slides", upload.single("onboard"), createOnboardingSlide)
+router.put("/onboard-slides/:id", upload.single("onboard"), updateOnboardingSlide);
+router.delete("/onboard-slides/:id", deleteOnboardingSlide);
+
+
 router.get("/home-learning-course", authMiddleware, getLearningCourses)
 router.get("/home-learning-course-details/:id", getLearningCoursesViaId)
 router.get("/get-app-events", getAppEvents)
@@ -15,8 +21,8 @@ router.get("/get-app-events", getAppEvents)
 //       Video routes
 // =====================================
 router.get("/lessons-chapters/:courseId", authMiddleware, getAllLessonsChapters)
-router.get("/videos/:lessonId/:courseId",authMiddleware, getVideosByLessonId)
-router.get("/all-quiz/:id",authMiddleware, getAllQuizes)
+router.get("/videos/:lessonId/:courseId", authMiddleware, getVideosByLessonId)
+router.get("/all-quiz/:id", authMiddleware, getAllQuizes)
 
 
 

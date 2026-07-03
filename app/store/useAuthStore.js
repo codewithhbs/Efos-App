@@ -42,17 +42,20 @@ const useAuthStore = create((set, get) => ({
   register: async (payload) => {
     try {
       set({ isLoading: true });
+
       const res = await API.post("/auth/register", payload);
 
-      const user = res.data.user;
-      await saveData("user", user);
-
-      set({ user, isAuthenticated: true });
-      return { success: true };
+      return {
+        success: true,
+        message: res.data.message,
+        registration_number: res.data.registration_number,
+        phone: res.data.phone,
+      };
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || "Registration failed",
+        message:
+          error.response?.data?.message || "Registration failed",
         errors: error.response?.data?.errors || {},
       };
     } finally {
@@ -61,26 +64,157 @@ const useAuthStore = create((set, get) => ({
   },
 
   // ========================
-  // LOGIN
+  // VERIFY REGISTER OTP
   // ========================
-  login: async (payload) => {
+  verifyRegisterOtp: async (
+    registration_number,
+    otp,
+    fcm_token = null
+  ) => {
     try {
       set({ isLoading: true });
-      const res = await API.post("/auth/login", payload);
 
-      const user = res.data.user;
-      const accessToken = res.data.accessToken;
-      const refreshToken = res.data.refreshToken;
+      const res = await API.post(
+        "/auth/verify-register-otp",
+        {
+          registration_number,
+          otp,
+          fcm_token,
+        }
+      );
+
+      const {
+        user,
+        accessToken,
+        refreshToken,
+      } = res.data;
+
       await saveData("user", user);
       await saveData("accessToken", accessToken);
       await saveData("refreshToken", refreshToken);
 
-      set({ user, isAuthenticated: true });
-      return { success: true };
+      set({
+        user,
+        isAuthenticated: true,
+      });
+
+      return {
+        success: true,
+        message: res.data.message,
+        user,
+      };
     } catch (error) {
       return {
         success: false,
-        message: error.response?.data?.message || "Login failed",
+        message:
+          error.response?.data?.message ||
+          "Invalid or expired OTP",
+      };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  resendLoginOtp: async (registration_number) => {
+  try {
+    set({ isLoading: true });
+
+    const res = await API.post("/auth/resend-login-otp", {
+      registration_number,
+    });
+
+    return {
+      success: true,
+      message: res.data.message,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error.response?.data?.message || "Failed to resend OTP",
+    };
+  } finally {
+    set({ isLoading: false });
+  }
+},
+resendRegisterOtp: async (registration_number) => {
+  try {
+    set({ isLoading: true });
+
+    const res = await API.post("/auth/resend-register-otp", {
+      registration_number,
+    });
+
+    return {
+      success: true,
+      message: res.data.message,
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error.response?.data?.message || "Failed to resend OTP",
+    };
+  } finally {
+    set({ isLoading: false });
+  }
+},
+  // ========================
+  // LOGIN
+  // ========================
+  login: async (registration_number) => {
+    try {
+      set({ isLoading: true });
+
+      const res = await API.post("/auth/login", {
+        registration_number,
+      });
+
+      return {
+        success: true,
+        message: res.data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Failed to send OTP",
+      };
+    } finally {
+      set({ isLoading: false });
+    }
+  },
+
+  // ========================
+  // VERIFY LOGIN OTP
+  // ========================
+  verifyOtp: async (registration_number, otp) => {
+    try {
+      set({ isLoading: true });
+
+      const res = await API.post("/auth/verify-otp", {
+        registration_number,
+        otp,
+      });
+
+      const { user, accessToken, refreshToken } = res.data;
+
+      await saveData("user", user);
+      await saveData("accessToken", accessToken);
+      await saveData("refreshToken", refreshToken);
+
+      set({
+        user,
+        isAuthenticated: true,
+      });
+
+      return {
+        success: true,
+        message: res.data.message,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: error.response?.data?.message || "Invalid OTP",
       };
     } finally {
       set({ isLoading: false });

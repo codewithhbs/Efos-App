@@ -294,19 +294,19 @@ exports.getVideosByLessonId = async (req, res) => {
             pdf_file: item.pdf_file
                 ? item.pdf_file.startsWith("http")
                     ? item.pdf_file
-                    : `${baseUrl}/${item.pdf_file}`
+                    : `${baseUrl}${item.pdf_file}`
                 : null,
 
             video_url: item.video_url
                 ? item.video_url.startsWith("http")
                     ? item.video_url
-                    : `${baseUrl}/${item.video_url}`
+                    : `${baseUrl}${item.video_url}`
                 : null,
 
             thumbnail: item.thumbnail
                 ? item.thumbnail.startsWith("http")
                     ? item.thumbnail
-                    : `${baseUrl}/${item.thumbnail}`
+                    : `${baseUrl}${item.thumbnail}`
                 : null,
 
             content: item.content || null,
@@ -474,7 +474,7 @@ exports.getAllMentors = async (req, res) => {
         const mentors = rows.map(item => ({
             ...item,
             profile_photo: item.profile_photo
-                ? `${baseUrl}/${item.profile_photo}`
+                ? `${baseUrl}${item.profile_photo}`
                 : null
         }));
 
@@ -567,7 +567,7 @@ exports.getOneMentor = async (req, res) => {
         const mentor = rows[0];
 
         mentor.profile_photo = mentor.profile_photo
-            ? `${baseUrl}/${mentor.profile_photo}`
+            ? `${baseUrl}${mentor.profile_photo}`
             : null;
 
         // =========================
@@ -1092,7 +1092,7 @@ exports.getMyBookingsDetails = async (req, res) => {
         const baseUrl = process.env.APP_API_URL || "";
 
         booking.mentor_photo = booking.mentor_photo
-            ? `${baseUrl}/${booking.mentor_photo}`
+            ? `${baseUrl}${booking.mentor_photo}`
             : null;
 
         return res.status(200).json({

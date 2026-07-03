@@ -1,5 +1,63 @@
 const getPool = require("../config/db");
 const pool = getPool();
+const fs = require("fs");
+const path = require("path");
+
+
+exports.createOnboardingSlide = async (req, res) => {
+  try {
+    let {
+      title,
+      description,
+      position = 1,
+      is_active = 1,
+    } = req.body;
+
+    let image_url = req.file ? req.file.path : null;
+
+
+    if (req.file) {
+      image_url = req.file.path.replace(/\\/g, "/");
+    }
+
+    if (!title || !image_url) {
+      return res.status(400).json({
+        success: false,
+        message: "Title and image_url are required.",
+      });
+    }
+
+    is_active = is_active ? 1 : 0;
+
+    const [result] = await pool.query(
+      `INSERT INTO onboarding_slides
+      (title, description, image_url, position, is_active)
+      VALUES (?, ?, ?, ?, ?)`,
+      [title, description || null, image_url, position, is_active]
+    );
+
+    return res.status(201).json({
+      success: true,
+      message: "Onboarding slide created successfully",
+      data: {
+        id: result.insertId,
+        title,
+        description,
+        image_url,
+        position,
+        is_active,
+      },
+    });
+
+  } catch (error) {
+    console.error("[createOnboardingSlide]", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
 
 exports.getOnBoardingSlides = async (req, res) => {
   try {
@@ -10,6 +68,13 @@ exports.getOnBoardingSlides = async (req, res) => {
        WHERE is_active = 1
        ORDER BY position ASC`
     );
+
+    const imageUrl = process.env.APP_API_URL_BACKEND || "";
+
+    slides.forEach(slide => {
+      slide.image_url = imageUrl + slide.image_url;
+    });
+
 
     return res.json({
       success: true,
@@ -28,96 +93,221 @@ exports.getOnBoardingSlides = async (req, res) => {
 };
 
 
+exports.updateOnboardingSlide = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    let {
+      title,
+      description,
+      position,
+      is_active,
+    } = req.body;
+
+    const [rows] = await pool.query(
+      "SELECT * FROM onboarding_slides WHERE id = ?",
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Onboarding slide not found.",
+      });
+    }
+
+    const slide = rows[0];
+
+    let image_url = slide.image_url;
+
+    // New image uploaded
+    if (req.file) {
+      image_url = req.file.path.replace(/\\/g, "/");
+
+      // Delete old image
+      if (slide.image_url) {
+        const oldImagePath = path.join(process.cwd(), slide.image_url);
+
+        if (fs.existsSync(oldImagePath)) {
+          fs.unlinkSync(oldImagePath);
+        }
+      }
+    }
+
+    await pool.query(
+      `UPDATE onboarding_slides
+      SET
+        title = ?,
+        description = ?,
+        image_url = ?,
+        position = ?,
+        is_active = ?
+      WHERE id = ?`,
+      [
+        title ?? slide.title,
+        description ?? slide.description,
+        image_url,
+        position ?? slide.position,
+        is_active !== undefined
+          ? (is_active ? 1 : 0)
+          : slide.is_active,
+        id,
+      ]
+    );
+
+    return res.json({
+      success: true,
+      message: "Onboarding slide updated successfully.",
+    });
+
+  } catch (error) {
+    console.error("[updateOnboardingSlide]", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+exports.deleteOnboardingSlide = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [rows] = await pool.query(
+      "SELECT * FROM onboarding_slides WHERE id = ?",
+      [id]
+    );
+
+    if (rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Onboarding slide not found.",
+      });
+    }
+
+    const slide = rows[0];
+
+    // Delete image
+    if (slide.image_url) {
+      const imagePath = path.join(process.cwd(), slide.image_url);
+
+      if (fs.existsSync(imagePath)) {
+        fs.unlinkSync(imagePath);
+      }
+    }
+
+    await pool.query(
+      "DELETE FROM onboarding_slides WHERE id = ?",
+      [id]
+    );
+
+    return res.json({
+      success: true,
+      message: "Onboarding slide deleted successfully.",
+    });
+
+  } catch (error) {
+    console.error("[deleteOnboardingSlide]", error);
+
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+
 // Learning coourses for home only 5
 exports.getLearningCourses = async (req, res) => {
-    try {
-        const {
-            page = 1,
-            limit = 5,
-            featured,
-            free,
-            level,
-            language,
-            search,
-            sort = "created_at",
-            order = "DESC",
-        } = req.query;
+  try {
+    const {
+      page = 1,
+      limit = 5,
+      featured,
+      free,
+      level,
+      language,
+      search,
+      sort = "created_at",
+      order = "DESC",
+    } = req.query;
 
-        const userId = req.user?.id || null;
-        const pageNum = parseInt(page);
-        const limitNum = parseInt(limit);
-        const offset = (pageNum - 1) * limitNum;
+    const userId = req.user?.id || null;
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const offset = (pageNum - 1) * limitNum;
 
-        // ===============================
-        // WHERE CLAUSE
-        // ===============================
-        let whereClause = `WHERE status = 1`;
-        const queryParams = [];
+    // ===============================
+    // WHERE CLAUSE
+    // ===============================
+    let whereClause = `WHERE status = 1`;
+    const queryParams = [];
 
-        if (featured !== undefined) {
-            whereClause += ` AND featured = ?`;
-            queryParams.push(
-                featured === "true" || featured === "1" ? 1 : 0
-            );
-        }
+    if (featured !== undefined) {
+      whereClause += ` AND featured = ?`;
+      queryParams.push(
+        featured === "true" || featured === "1" ? 1 : 0
+      );
+    }
 
-        if (free !== undefined) {
-            whereClause += ` AND is_free = ?`;
-            queryParams.push(
-                free === "true" || free === "1" ? 1 : 0
-            );
-        }
+    if (free !== undefined) {
+      whereClause += ` AND is_free = ?`;
+      queryParams.push(
+        free === "true" || free === "1" ? 1 : 0
+      );
+    }
 
-        if (level) {
-            whereClause += ` AND level = ?`;
-            queryParams.push(level);
-        }
+    if (level) {
+      whereClause += ` AND level = ?`;
+      queryParams.push(level);
+    }
 
-        if (language) {
-            whereClause += ` AND language = ?`;
-            queryParams.push(language);
-        }
+    if (language) {
+      whereClause += ` AND language = ?`;
+      queryParams.push(language);
+    }
 
-        if (search) {
-            whereClause += ` AND (title LIKE ? OR short_description LIKE ?)`;
-            const searchText = `%${search}%`;
-            queryParams.push(searchText, searchText);
-        }
+    if (search) {
+      whereClause += ` AND (title LIKE ? OR short_description LIKE ?)`;
+      const searchText = `%${search}%`;
+      queryParams.push(searchText, searchText);
+    }
 
-        // ===============================
-        // SAFE SORT
-        // ===============================
-        const allowedSort = [
-            "created_at",
-            "title",
-            "price",
-            "discount_price",
-        ];
+    // ===============================
+    // SAFE SORT
+    // ===============================
+    const allowedSort = [
+      "created_at",
+      "title",
+      "price",
+      "discount_price",
+    ];
 
-        const sortField = allowedSort.includes(sort)
-            ? sort
-            : "created_at";
+    const sortField = allowedSort.includes(sort)
+      ? sort
+      : "created_at";
 
-        const sortOrder =
-            order.toUpperCase() === "ASC" ? "ASC" : "DESC";
+    const sortOrder =
+      order.toUpperCase() === "ASC" ? "ASC" : "DESC";
 
-        // ===============================
-        // CUSTOM ORDER
-        // Featured First
-        // Paid Second
-        // Free Third
-        // ===============================
-        const customOrder = `
+    // ===============================
+    // CUSTOM ORDER
+    // Featured First
+    // Paid Second
+    // Free Third
+    // ===============================
+    const customOrder = `
             featured DESC,
             is_free ASC,
             ${sortField} ${sortOrder}
         `;
 
-        // ===============================
-        // GET COURSES
-        // ===============================
-        const [courses] = await pool.query(
-            `
+    // ===============================
+    // GET COURSES
+    // ===============================
+    const [courses] = await pool.query(
+      `
             SELECT
                 id,
                 title,
@@ -139,93 +329,93 @@ exports.getLearningCourses = async (req, res) => {
             ORDER BY ${customOrder}
             LIMIT ? OFFSET ?
             `,
-            [...queryParams, limitNum, offset]
-        );
+      [...queryParams, limitNum, offset]
+    );
 
-        // ===============================
-        // TOTAL COUNT
-        // ===============================
-        const [[{ total }]] = await pool.query(
-            `
+    // ===============================
+    // TOTAL COUNT
+    // ===============================
+    const [[{ total }]] = await pool.query(
+      `
             SELECT COUNT(*) AS total
             FROM learning_courses
             ${whereClause}
             `,
-            queryParams
-        );
+      queryParams
+    );
 
-        // ===============================
-        // PURCHASED IDS
-        // ===============================
-        let purchasedIds = [];
+    // ===============================
+    // PURCHASED IDS
+    // ===============================
+    let purchasedIds = [];
 
-        if (userId) {
-            const [purchased] = await pool.query(
-                `
+    if (userId) {
+      const [purchased] = await pool.query(
+        `
                 SELECT learning_course_id
                 FROM course_buys
                 WHERE user_id = ?
                 `,
-                [userId]
-            );
+        [userId]
+      );
 
-            purchasedIds = purchased.map(
-                (item) => item.learning_course_id
-            );
-        }
-
-        // ===============================
-        // FORMAT DATA
-        // ===============================
-        const baseUrl = process.env.APP_API_URL || "";
-
-        const data = courses.map((course) => {
-            const isAlreadyPurchase =
-                purchasedIds.includes(course.id);
-
-            return {
-                ...course,
-
-                thumbnail: course.thumbnail
-                    ? course.thumbnail.startsWith("http")
-                        ? course.thumbnail
-                        : `${baseUrl}/${course.thumbnail}`
-                    : null,
-
-                final_price:
-                    course.has_discount &&
-                    course.discount_price
-                        ? parseFloat(course.discount_price)
-                        : parseFloat(course.price),
-
-                isAlreadyPurchase,
-            };
-        });
-
-        // ===============================
-        // RESPONSE
-        // ===============================
-        return res.json({
-            success: true,
-            count: data.length,
-            total,
-            totalPages: Math.ceil(total / limitNum),
-            currentPage: pageNum,
-            data,
-        });
-
-    } catch (error) {
-        console.error("[getLearningCourses Error]", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Failed to fetch learning courses",
-            error:
-                process.env.NODE_ENV === "development"
-                    ? error.message
-                    : undefined,
-        });
+      purchasedIds = purchased.map(
+        (item) => item.learning_course_id
+      );
     }
+
+    // ===============================
+    // FORMAT DATA
+    // ===============================
+    const baseUrl = process.env.APP_API_URL || "";
+
+    const data = courses.map((course) => {
+      const isAlreadyPurchase =
+        purchasedIds.includes(course.id);
+
+      return {
+        ...course,
+
+        thumbnail: course.thumbnail
+          ? course.thumbnail.startsWith("http")
+            ? course.thumbnail
+            : `${baseUrl}${course.thumbnail}`
+          : null,
+
+        final_price:
+          course.has_discount &&
+            course.discount_price
+            ? parseFloat(course.discount_price)
+            : parseFloat(course.price),
+
+        isAlreadyPurchase,
+      };
+    });
+
+    // ===============================
+    // RESPONSE
+    // ===============================
+    return res.json({
+      success: true,
+      count: data.length,
+      total,
+      totalPages: Math.ceil(total / limitNum),
+      currentPage: pageNum,
+      data,
+    });
+
+  } catch (error) {
+    console.error("[getLearningCourses Error]", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch learning courses",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : undefined,
+    });
+  }
 };
 
 exports.getLearningCoursesViaId = async (req, res) => {
@@ -290,7 +480,7 @@ exports.getLearningCoursesViaId = async (req, res) => {
     course.thumbnail = course.thumbnail
       ? course.thumbnail.startsWith("http")
         ? course.thumbnail
-        : `${baseUrl}/${course.thumbnail}`
+        : `${baseUrl}${course.thumbnail}`
       : null;
 
     // =====================================

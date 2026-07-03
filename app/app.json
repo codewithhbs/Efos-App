@@ -138,11 +138,11 @@
         }
       ]
     ],
-
     "extra": {
       "eas": {
         "projectId": "380e3e33-6978-4d33-aad5-85dfd9dfa8e7"
       }
-    }
+    },
+    "owner": "hbsdevelopersteam"
   }
 }

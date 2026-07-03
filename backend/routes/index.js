@@ -5,6 +5,7 @@ const authRoutes = require("./auth.routes");
 const extraRoutes = require("./extra.route");
 const JobRoutes = require("./job.routes");
 const QuizRoutes = require("./quiz.routes");
+const BundleRoutes = require("./bundle.routes");
 
 
 
@@ -12,6 +13,7 @@ const QuizRoutes = require("./quiz.routes");
 router.use("/auth", authRoutes);
 router.use("/extra", extraRoutes);
 router.use("/job", JobRoutes);
+router.use("/bundle", BundleRoutes);
 
 router.use("/quiz", QuizRoutes);
 

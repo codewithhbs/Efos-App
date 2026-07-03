@@ -6,7 +6,6 @@ export const saveData = async (key, data) => {
     const stringData = JSON.stringify(data);
     await AsyncStorage.setItem(key, stringData);
 
-    console.log(`✅ Saved: ${key}`);
     return true;
   } catch (error) {
     console.error("❌ Save Error:",key, error);
@@ -34,7 +33,6 @@ export const getData = async (key) => {
 export const removeData = async (key) => {
   try {
     await AsyncStorage.removeItem(key);
-    console.log(`🗑️ Removed: ${key}`);
     return true;
   } catch (error) {
     console.error("❌ Remove Error:", error);
@@ -46,7 +44,6 @@ export const removeData = async (key) => {
 export const clearAll = async () => {
   try {
     await AsyncStorage.clear();
-    console.log("🧹 Storage cleared");
     return true;
   } catch (error) {
     console.error("❌ Clear Error:", error);

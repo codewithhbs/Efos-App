@@ -14,12 +14,17 @@ CREATE TABLE user_tokens (
 
 //add in user
 avatarUrl feild
-fcm_token varcher 2000 defalut null
 
+login_otp
+login_otp_expiry
 forget_otp
 forget_otp_expiry
 new_password
 
+
+ALTER TABLE users
+ADD COLUMN register_otp VARCHAR(10) NULL DEFAULT NULL AFTER login_otp_expiry,
+ADD COLUMN register_otp_expiry DATETIME NULL DEFAULT NULL AFTER register_otp;
 ALTER TABLE `learning_courses` ADD `featured` BOOLEAN NOT NULL DEFAULT FALSE AFTER `updated_at`;
 
 

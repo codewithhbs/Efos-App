@@ -398,7 +398,8 @@ export default function CourseDetails({ route, navigation }) {
             }
             const { payment_session_id, order_id, environment } = res.data.data;
             const session = new CFSession(
-                payment_session_id, order_id,
+                payment_session_id, 
+                order_id,
                 environment === "PRODUCTION" ? CFEnvironment.PRODUCTION : CFEnvironment.SANDBOX
             );
             const theme = new CFThemeBuilder()

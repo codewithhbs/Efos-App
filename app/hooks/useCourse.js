@@ -12,7 +12,6 @@ export const useCourse = ({ id = null, userId = null }) => {
             setLoading(true);
 
             const response = await API.get("/extra/home-learning-course");
-            console.log("Fetched Courses:", response.data);
             setCourses(response.data.data || []);
         } catch (error) {
             console.log(error);
