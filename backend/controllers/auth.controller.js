@@ -448,6 +448,7 @@ exports.resendLoginOtp = async (req, res) => {
 exports.resendRegisterOtp = async (req, res) => {
     try {
         const { registration_number } = req.body;
+        console.log("Resend Register OTP Request:",req.body, registration_number);
 
         if (!registration_number) {
             return res.status(400).json({
