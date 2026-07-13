@@ -235,7 +235,7 @@ const JobCard = memo(({ item, onPress, onBookmark, bookmarked }) => {
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export default function AllJobs({ navigation, route }) {
     const { user } = useAuthStore();
-    const { categorySlug } = route.params || {}
+    const { categorySlug, id } = route.params || {}
     const [jobs, setJobs] = useState([]);
     const [categories, setCategories] = useState([]);
     const [page, setPage] = useState(1);
@@ -250,15 +250,16 @@ export default function AllJobs({ navigation, route }) {
     const scrollY = useRef(new Animated.Value(0)).current;
     const headerElev = scrollY.interpolate({ inputRange: [0, 40], outputRange: [0, 6], extrapolate: "clamp" });
 
-        useEffect(()=>{
-            if(categorySlug){
-                setActiveChip(categorySlug)
-            }
-        },[categorySlug])
+    useEffect(() => {
+        if (categorySlug) {
+            setActiveChip(categorySlug)
+        }
+    }, [categorySlug])
     // Fetch categories
     useEffect(() => {
         const fetchCats = async () => {
             try {
+
                 const res = await API.get("/job/category");
                 const cats = res.data?.data || [];
                 setCategories(cats);
@@ -269,6 +270,11 @@ export default function AllJobs({ navigation, route }) {
         fetchCats();
     }, []);
 
+    const activeCategoryId = useMemo(() => {
+        if (activeChip === "all") return null;
+        const cat = categories.find((c) => c.slug === activeChip);
+        return cat?.id ?? (categorySlug === activeChip ? id : null); // fallback: params se aayi id
+    }, [activeChip, categories, categorySlug, id]);
     // Fetch jobs
     const fetchJobs = useCallback(async (pageNo = 1, more = false, refresh = false) => {
         try {
@@ -276,9 +282,10 @@ export default function AllJobs({ navigation, route }) {
             else if (refresh) setRefreshing(true);
             else setLoading(true);
 
-            // Build query: add category slug if not "all"
             let url = `/job/get?page=${pageNo}&limit=10`;
-            if (activeChip !== "all") url += `&category=${activeChip}`;
+            if (activeChip !== "all" && activeCategoryId) {
+                url += `&category=${activeCategoryId}`;
+            }
 
             const res = await API.get(url);
             const list = res.data?.data || [];
@@ -295,7 +302,7 @@ export default function AllJobs({ navigation, route }) {
             setLoadingMore(false);
             setRefreshing(false);
         }
-    }, [activeChip]);
+    }, [activeChip, activeCategoryId]);
 
     useEffect(() => { fetchJobs(1); }, [activeChip]);
 

@@ -25,6 +25,7 @@ import { CourseCard, OpportunityChip, SectionHeader } from '../../components/Reu
 import HomeHero from '../../components/HomeComponents/HomeHero';
 import JobCard from '../../components/HomeComponents/JobCard';
 import ResumeFab from './ResumeFab';
+import BlogsComponent from './BlogsComponent';
 
 const { width } = Dimensions.get('window');
 
@@ -270,7 +271,7 @@ export default function HomeScreen({ navigation }) {
                   isSelected={selectedOpp === item.id}
                   onPress={() => {
                     setSelectedOpp(item.id);
-                    navigation.navigate('Jobs', { categorySlug: item.slug, categoryName: item.name });
+                    navigation.navigate('Jobs', {id:item.id, categorySlug: item.slug, categoryName: item.name });
                   }}
                 />
               ))}
@@ -372,6 +373,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
+      <BlogsComponent/>
         <View style={{ height: 32 }} />
       </ScrollView>
       <ResumeFab

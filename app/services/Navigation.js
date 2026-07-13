@@ -18,7 +18,7 @@ import {
 } from "../pages/Auth/Authscreens"
 import HomeScreen from "../pages/Home/HomeScreen"
 import { LecturePlayerScreen, MyLearningScreen } from "../pages/Auth/Learningscreens"
-import { CommunityScreen, NotificationsScreen, TestAttemptScreen, TestsScreen } from "../pages/extra/Extrascreens"
+import { CommunityScreen, TestAttemptScreen, TestsScreen } from "../pages/extra/Extrascreens"
 import { ProfileScreen } from "../pages/Profile/Profile"
 import CourseDetails from "../pages/Course/CourseDetails"
 import classroom from "../pages/Classroom/classroom"
@@ -42,6 +42,9 @@ import QuizPlayScreen from "../pages/QuizScreen/QuizPlayScreen"
 import AllBundleCourse from "../pages/BundleCourses/AllBundleCourse"
 import BundleDetails from "../pages/BundleCourses/Bundledetails"
 import MyBundleCourses from "../pages/BundleCourses/MyBundleCourses"
+import { NotificationsScreen } from "../pages/extra/NotificationsScreen"
+import AllBlogs from "../pages/Home/AllBlogs"
+import DetailsBlogs from "../pages/Home/DetailsBlogs"
 
 
 const Stack = createStackNavigator()
@@ -90,8 +93,8 @@ function TabBar() {
       />
       <Tab.Screen
         name="Tests"
-        component={TestsScreen}
-        options={{ tabBarLabel: "Tests" }}
+        component={AllJobs}
+        options={{ tabBarLabel: "Opportunity" }}
       />
       <Tab.Screen
         name="Profile"
@@ -139,6 +142,11 @@ export default function Navigation() {
         <Stack.Screen name="MentorDetails" component={MentorDetails} />
         <Stack.Screen name="BookSessionWithMentor" component={BookSessionWithMentor} />
         <Stack.Screen name="BookingSuccess" component={BookingSuccess} />
+
+        <Stack.Screen name="AllBlogs" component={AllBlogs} />
+        <Stack.Screen name="DetailsBlogs" component={DetailsBlogs} />
+
+{/* DetailsBlogs */}
 
         <Stack.Screen name="AllMyCourses" component={MyCourseEnrolled} />
         <Stack.Screen name="AllMentorsBookings" component={BookedSessions} />

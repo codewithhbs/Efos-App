@@ -125,3 +125,64 @@ CREATE TABLE coupon_usages (
     INDEX idx_coupon_user (coupon_id, user_id),
     INDEX idx_course_buy (course_buy_id)
 );
+
+
+
+
+
+CREATE TABLE notifications (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+
+    -- Receiver
+    user_id BIGINT UNSIGNED NOT NULL,
+
+    -- Notification Content
+    title VARCHAR(255) NOT NULL,
+    message TEXT NOT NULL,
+
+    -- Type
+    type ENUM(
+        'general',
+        'job',
+        'application',
+        'payment',
+        'wallet',
+        'chat',
+        'system',
+        'offer',
+        'promotion'
+    ) DEFAULT 'general',
+
+    -- Deep Link
+    screen VARCHAR(100) DEFAULT NULL,
+    reference_id BIGINT DEFAULT NULL,
+
+    -- Additional Payload
+    data JSON DEFAULT NULL,
+
+    -- Read Status
+    is_read TINYINT(1) NOT NULL DEFAULT 0,
+    read_at DATETIME DEFAULT NULL,
+
+    -- Push Status
+    is_sent TINYINT(1) NOT NULL DEFAULT 0,
+    sent_at DATETIME DEFAULT NULL,
+
+    -- Delete Status
+    is_deleted TINYINT(1) NOT NULL DEFAULT 0,
+    deleted_at DATETIME DEFAULT NULL,
+
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    INDEX idx_user (user_id),
+    INDEX idx_read (is_read),
+    INDEX idx_type (type),
+    INDEX idx_created (created_at),
+
+    CONSTRAINT fk_notifications_user
+        FOREIGN KEY (user_id)
+        REFERENCES users(id)
+        ON DELETE CASCADE
+);

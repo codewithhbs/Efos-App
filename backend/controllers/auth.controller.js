@@ -1,19 +1,21 @@
 const bcrypt = require("bcrypt");
 const getPool = require("../config/db");
 const { signToken, signRefreshToken, verifyToken } = require("../utils/jwt");
-const { sendEmail } = require("../utils/sendEmail");
+const { sendEmail, sanitizeRecipient } = require("../utils/sendEmail");
 const pool = getPool();
-const generateOTP = () => Math.floor(100000 + Math.random() * 900000);
+const generateOTP = () => Math.floor(1000 + Math.random() * 9999).toString(); //4 digit otp
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
 const sendDltOtp = require("../utils/sendDltOtp");
+const { sendNotification } = require("../utils/sendNotifications");
 
 // Ensure resume directory exists
 const resumeDir = path.join(__dirname, '../uploads/resumes');
 if (!fs.existsSync(resumeDir)) {
     fs.mkdirSync(resumeDir, { recursive: true });
 }
+
 const ACCESS_COOKIE_OPTIONS = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
@@ -28,8 +30,80 @@ const REFRESH_COOKIE_OPTIONS = {
     maxAge: 7 * 24 * 60 * 60 * 1000,
 };
 
-// ─── Register ─────────────────────────────────────────────────────────────────
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Accept registration_number OR phone OR email as the login identifier.
+const findUserByIdentifier = async (identifier) => {
+    const id = String(identifier).trim();
+
+    const [[user]] = await pool.query(
+        `SELECT
+            u.*,
+            s.registration_number
+         FROM users u
+         LEFT JOIN students s ON s.user_id = u.id
+         WHERE s.registration_number = ?
+            OR u.phone = ?
+            OR u.email = ?
+         LIMIT 1`,
+        [id, id, id.toLowerCase()]
+    );
+
+    return user || null;
+};
+
+const toMobile = (phone) => {
+    const localDigits = String(phone || "").replace(/\D/g, "").slice(-10);
+    return `91${localDigits}`;
+};
+
+const issueSession = async (req, res, user, fcm_token = null) => {
+    const accessToken = signToken({ id: user.id, email: user.email });
+    const refreshToken = signRefreshToken({ id: user.id });
+    console.log("fcm_token", fcm_token)
+    const device = req.headers["user-agent"] || "Unknown";
+    const ip =
+        req.headers["x-forwarded-for"] ||
+        req.socket.remoteAddress ||
+        req.ip;
+
+    if (fcm_token) {
+        await pool.query(
+            "UPDATE users SET fcm_token = ? WHERE id = ?",
+            [fcm_token, user.id]
+        );
+    }
+
+    await pool.query(
+        `INSERT INTO user_tokens
+        (user_id, refresh_token, device, user_agent, ip_address, expires_at)
+        VALUES (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
+        [user.id, refreshToken, device, device, ip]
+    );
+
+    res.cookie("accessToken", accessToken, ACCESS_COOKIE_OPTIONS);
+    res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
+
+    const safeUser = { ...user };
+    delete safeUser.password;
+    delete safeUser.new_password;
+    delete safeUser.login_otp;
+    delete safeUser.login_otp_expiry;
+    delete safeUser.register_otp;
+    delete safeUser.register_otp_expiry;
+    delete safeUser.forget_otp;
+    delete safeUser.forget_otp_expiry;
+
+    return { accessToken, refreshToken, user: safeUser };
+};
+
+// ─── Register ─────────────────────────────────────────────────────────────────
+// controllers/authController.js → replace exports.registerUser with this
+
+const ALLOWED_AGE_GROUPS = ["16_18", "19_21", "22_25", "26_30"];
+const ALLOWED_GENDERS = ["Male", "Female", "Others"];
 
 exports.registerUser = async (req, res) => {
     const connection = await pool.getConnection();
@@ -46,6 +120,10 @@ exports.registerUser = async (req, res) => {
             fcm_token,
             state,
             district,
+            age_group,
+            gender,
+            highest_qualification,
+            present_status,
             looking_for,
             agree_terms
         } = req.body;
@@ -69,6 +147,32 @@ exports.registerUser = async (req, res) => {
             errors.email = "Invalid email format";
         }
 
+        const digits = String(phone || "").replace(/\D/g, "");
+
+        if (phone && digits.length !== 10) {
+            errors.phone = "Enter a valid 10-digit phone number";
+        }
+
+        if (!state?.trim()) errors.state = "State is required";
+        if (!district?.trim()) errors.district = "District is required";
+        if (!age_group?.trim()) errors.age_group = "Age group is required";
+        if (!gender?.trim()) errors.gender = "Gender is required";
+        if (!highest_qualification?.trim()) errors.highest_qualification = "Qualification is required";
+        if (!present_status?.trim()) errors.present_status = "Present status is required";
+        if (!looking_for?.trim()) errors.looking_for = "Please select what you are looking for";
+
+        if (age_group && !ALLOWED_AGE_GROUPS.includes(age_group)) {
+            errors.age_group = "Invalid age group";
+        }
+
+        if (gender && !ALLOWED_GENDERS.includes(gender)) {
+            errors.gender = "Invalid gender";
+        }
+
+        if (!agree_terms) {
+            errors.agree_terms = "You must accept the terms & conditions";
+        }
+
         if (Object.keys(errors).length > 0) {
             await connection.rollback();
             connection.release();
@@ -80,11 +184,10 @@ exports.registerUser = async (req, res) => {
         }
 
         const normalizedEmail = email.toLowerCase().trim();
-        const normalizedPhone = phone.trim();
+        const normalizedPhone = digits;
 
-        // Check Existing User
         const [existingUsers] = await connection.query(
-            `SELECT id, email, phone
+            `SELECT id
              FROM users
              WHERE email = ? OR phone = ?
              LIMIT 1`,
@@ -95,15 +198,12 @@ exports.registerUser = async (req, res) => {
             await connection.rollback();
             connection.release();
 
-            // Generic message: don't reveal which field matched (avoids
-            // account enumeration).
             return res.status(409).json({
                 success: false,
                 message: "An account with this email or phone number already exists."
             });
         }
 
-        // Create User
         const hashedPassword = await bcrypt.hash(password, 12);
 
         const avatarUrl =
@@ -125,9 +225,6 @@ exports.registerUser = async (req, res) => {
 
         const userId = userResult.insertId;
 
-        // Generate Registration Number
-        // Lock all EFOS-prefixed rows and take the true numeric max, not just
-        // the most recently inserted row (which may be malformed/non-EFOS).
         const [studentRows] = await connection.query(
             `SELECT registration_number
              FROM students
@@ -148,7 +245,7 @@ exports.registerUser = async (req, res) => {
         const registrationNumber =
             "EFOS" + String(maxNumber + 1).padStart(3, "0");
 
-        // Create Student
+        // 14 columns → 14 placeholders (old code had 14 cols / 9 values — SQL error)
         await connection.query(
             `INSERT INTO students
             (
@@ -158,44 +255,45 @@ exports.registerUser = async (req, res) => {
                 email,
                 state,
                 district,
+                age_group,
+                gender,
+                highest_qualification,
+                present_status,
                 looking_for,
                 registration_number,
                 agree_terms,
                 created_at,
                 updated_at
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
             [
                 userId,
                 name.trim(),
                 normalizedPhone,
                 normalizedEmail,
-                state?.trim() || null,
-                district?.trim() || null,
-                looking_for?.trim() || null,
+                state.trim(),
+                district.trim(),
+                age_group.trim(),
+                gender.trim(),
+                highest_qualification.trim(),
+                present_status.trim(),
+                looking_for.trim(),
                 registrationNumber,
                 agree_terms ? 1 : 0
             ]
         );
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        const otp = generateOTP();
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
         await connection.query(
             `UPDATE users
-             SET register_otp = ?,
-                 register_otp_expiry = ?
+             SET register_otp = ?, register_otp_expiry = ?
              WHERE id = ?`,
             [otp, otpExpiry, userId]
         );
 
-        // Normalize to 10-digit local number, then prefix with country code.
-        // (Old check `startsWith("91")` wrongly skipped prefixing for any
-        // 10-digit number that happened to start with 91, e.g. 9198xxxxx.)
-        const localDigits = normalizedPhone.replace(/\D/g, "").slice(-10);
-        const mobile = `91${localDigits}`;
-
-        const sms = await sendDltOtp(mobile, otp);
+        const sms = await sendDltOtp(toMobile(normalizedPhone), otp);
 
         if (!sms.success) {
             await connection.rollback();
@@ -218,6 +316,7 @@ exports.registerUser = async (req, res) => {
                 name: name.trim(),
                 email: normalizedEmail
             },
+            phone: normalizedPhone,
             registration_number: registrationNumber
         });
 
@@ -233,6 +332,8 @@ exports.registerUser = async (req, res) => {
         });
     }
 };
+
+// ─── Verify Register OTP ──────────────────────────────────────────────────────
 exports.verifyRegisterOtp = async (req, res) => {
     try {
         const { registration_number, otp, fcm_token } = req.body;
@@ -244,18 +345,7 @@ exports.verifyRegisterOtp = async (req, res) => {
             });
         }
 
-        // Find user with student details
-        const [[user]] = await pool.query(
-            `SELECT
-                u.*,
-                s.registration_number
-            FROM users u
-            INNER JOIN students s
-                ON s.user_id = u.id
-            WHERE s.registration_number = ?
-            LIMIT 1`,
-            [registration_number]
-        );
+        const user = await findUserByIdentifier(registration_number);
 
         if (!user) {
             return res.status(404).json({
@@ -264,15 +354,13 @@ exports.verifyRegisterOtp = async (req, res) => {
             });
         }
 
-        // Check OTP
-        if (!user.register_otp || user.register_otp !== otp) {
+        if (!user.register_otp || String(user.register_otp) !== String(otp).trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Invalid OTP."
             });
         }
 
-        // Check Expiry
         if (
             !user.register_otp_expiry ||
             new Date(user.register_otp_expiry) < new Date()
@@ -283,102 +371,198 @@ exports.verifyRegisterOtp = async (req, res) => {
             });
         }
 
-        // Generate Tokens
-        const accessToken = signToken({
-            id: user.id,
-            email: user.email
-        });
-
-        const refreshToken = signRefreshToken({
-            id: user.id
-        });
-
-        const device = req.headers["user-agent"] || "Unknown";
-
-        const ip =
-            req.headers["x-forwarded-for"] ||
-            req.socket.remoteAddress ||
-            req.ip;
-
-        // Clear OTP + Update FCM Token
         await pool.query(
             `UPDATE users
-             SET
-                register_otp = NULL,
-                register_otp_expiry = NULL,
-                fcm_token = ?
+             SET register_otp = NULL,
+                 register_otp_expiry = NULL,
+                 email_verified_at = COALESCE(email_verified_at, NOW())
              WHERE id = ?`,
-            [
-                fcm_token || user.fcm_token,
-                user.id
-            ]
+            [user.id]
         );
 
-        // Save Refresh Token
-        await pool.query(
-            `INSERT INTO user_tokens
-            (
-                user_id,
-                refresh_token,
-                device,
-                user_agent,
-                ip_address,
-                expires_at
-            )
-            VALUES
-            (
-                ?, ?, ?, ?, ?,
-                DATE_ADD(NOW(), INTERVAL 7 DAY)
-            )`,
-            [
-                user.id,
-                refreshToken,
-                device,
-                device,
-                ip
-            ]
-        );
-
-        res.cookie(
-            "accessToken",
-            accessToken,
-            ACCESS_COOKIE_OPTIONS
-        );
-
-        res.cookie(
-            "refreshToken",
-            refreshToken,
-            REFRESH_COOKIE_OPTIONS
-        );
-
-        delete user.password;
-        delete user.register_otp;
-        delete user.register_otp_expiry;
+        const session = await issueSession(req, res, user, fcm_token || null);
 
         return res.json({
             success: true,
             message: "Registration verified successfully.",
-            accessToken,
-            refreshToken,
-            user
+            ...session
         });
 
     } catch (error) {
-
         console.error("[verifyRegisterOtp]", error);
 
         return res.status(500).json({
             success: false,
             message: "Something went wrong."
         });
-
     }
 };
 
+// ─── Login (DUAL MODE: password OR otp) ───────────────────────────────────────
+// body: { registration_number, mode: "password" | "otp", password? }
+exports.loginUser = async (req, res) => {
+    try {
+        const { registration_number, password, fcm_token } = req.body;
+        const mode = (req.body.mode || (password ? "password" : "otp")).toLowerCase();
+
+        if (!registration_number?.toString().trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Registration number is required.",
+            });
+        }
+
+        const user = await findUserByIdentifier(registration_number);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "No account found with this registration number.",
+            });
+        }
+
+        // ── PASSWORD MODE ────────────────────────────────────────────────
+        if (mode === "password") {
+            if (!password) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Password is required.",
+                });
+            }
+
+            if (!user.password) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Password login not available for this account. Use OTP login.",
+                });
+            }
+
+            const ok = await bcrypt.compare(password, user.password);
+
+            if (!ok) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Invalid registration number or password.",
+                });
+            }
+
+            const session = await issueSession(req, res, user, fcm_token || null);
+
+            return res.json({
+                success: true,
+                mode: "password",
+                otp_required: false,
+                message: "Login successful.",
+                ...session
+            });
+        }
+
+        // ── OTP MODE ─────────────────────────────────────────────────────
+        const otp = generateOTP();
+        const expiry = new Date(Date.now() + 10 * 60 * 1000);
+
+        await pool.query(
+            `UPDATE users
+             SET login_otp = ?, login_otp_expiry = ?, fcm_token = ?
+             WHERE id = ?`,
+            [otp, expiry, fcm_token, user.id]
+        );
+
+        const sms = await sendDltOtp(toMobile(user.phone), otp);
+
+        if (!sms.success) {
+            return res.status(500).json({
+                success: false,
+                message: "Unable to send OTP.",
+            });
+        }
+
+        return res.json({
+            success: true,
+            mode: "otp",
+            otp_required: true,
+            registration_number: user.registration_number,
+            message: "OTP sent successfully.",
+        });
+
+    } catch (error) {
+        console.error("[loginUser]", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong.",
+        });
+    }
+};
+
+// ─── Verify Login OTP ─────────────────────────────────────────────────────────
+exports.verifyOtp = async (req, res) => {
+    try {
+        const { registration_number, otp, fcm_token } = req.body;
+
+        if (!registration_number || !otp) {
+            return res.status(400).json({
+                success: false,
+                message: "Registration number and OTP are required.",
+            });
+        }
+
+        const user = await findUserByIdentifier(registration_number);
+
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                message: "User not found.",
+            });
+        }
+
+        if (!user.login_otp || String(user.login_otp) !== String(otp).trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid OTP.",
+            });
+        }
+
+        if (
+            !user.login_otp_expiry ||
+            new Date(user.login_otp_expiry) < new Date()
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "OTP has expired.",
+            });
+        }
+
+        await pool.query(
+            `UPDATE users
+             SET login_otp = NULL, login_otp_expiry = NULL
+             WHERE id = ?`,
+            [user.id]
+        );
+
+        const session = await issueSession(req, res, user, fcm_token || null);
+
+        return res.json({
+            success: true,
+            message: "Login successful.",
+            ...session
+        });
+
+    } catch (error) {
+        console.error("[verifyOtp]", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Something went wrong.",
+        });
+    }
+};
+
+// ─── Resend Login OTP ─────────────────────────────────────────────────────────
 exports.resendLoginOtp = async (req, res) => {
     try {
-        const { registration_number } = req.body;
-
+        const { registration_number, fcm_token } = req.body;
+        console.log(fcm_token)
         if (!registration_number) {
             return res.status(400).json({
                 success: false,
@@ -386,15 +570,7 @@ exports.resendLoginOtp = async (req, res) => {
             });
         }
 
-        const [[user]] = await pool.query(
-            `SELECT u.id,u.phone
-             FROM users u
-             INNER JOIN students s
-             ON s.user_id=u.id
-             WHERE s.phone=?
-             LIMIT 1`,
-            [registration_number]
-        );
+        const user = await findUserByIdentifier(registration_number);
 
         if (!user) {
             return res.status(404).json({
@@ -403,23 +579,17 @@ exports.resendLoginOtp = async (req, res) => {
             });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
+        const otp = generateOTP();
         const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
         await pool.query(
             `UPDATE users
-             SET login_otp=?,
-                 login_otp_expiry=?
-             WHERE id=?`,
-            [otp, expiry, user.id]
+             SET login_otp = ?, login_otp_expiry = ?,fcm_token = ?
+             WHERE id = ?`,
+            [otp, expiry, fcm_token, user.id]
         );
 
-        const mobile = user.phone.startsWith("91")
-            ? user.phone
-            : `91${user.phone}`;
-
-        const sms = await sendDltOtp(mobile, otp);
+        const sms = await sendDltOtp(toMobile(user.phone), otp);
 
         if (!sms.success) {
             return res.status(500).json({
@@ -434,21 +604,19 @@ exports.resendLoginOtp = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("[resendLoginOtp]", err);
 
         return res.status(500).json({
             success: false,
             message: "Server error."
         });
-
     }
 };
 
+// ─── Resend Register OTP ──────────────────────────────────────────────────────
 exports.resendRegisterOtp = async (req, res) => {
     try {
         const { registration_number } = req.body;
-        console.log("Resend Register OTP Request:",req.body, registration_number);
 
         if (!registration_number) {
             return res.status(400).json({
@@ -457,15 +625,7 @@ exports.resendRegisterOtp = async (req, res) => {
             });
         }
 
-        const [[user]] = await pool.query(
-            `SELECT u.id,u.phone
-             FROM users u
-             INNER JOIN students s
-             ON s.user_id=u.id
-             WHERE s.phone=?
-             LIMIT 1`,
-            [registration_number]
-        );
+        const user = await findUserByIdentifier(registration_number);
 
         if (!user) {
             return res.status(404).json({
@@ -474,23 +634,17 @@ exports.resendRegisterOtp = async (req, res) => {
             });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
+        const otp = generateOTP();
         const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
         await pool.query(
             `UPDATE users
-             SET register_otp=?,
-                 register_otp_expiry=?
-             WHERE id=?`,
+             SET register_otp = ?, register_otp_expiry = ?
+             WHERE id = ?`,
             [otp, expiry, user.id]
         );
 
-        const mobile = user.phone.startsWith("91")
-            ? user.phone
-            : `91${user.phone}`;
-
-        const sms = await sendDltOtp(mobile, otp);
+        const sms = await sendDltOtp(toMobile(user.phone), otp);
 
         if (!sms.success) {
             return res.status(500).json({
@@ -505,22 +659,20 @@ exports.resendRegisterOtp = async (req, res) => {
         });
 
     } catch (err) {
-
         console.error("[resendRegisterOtp]", err);
 
         return res.status(500).json({
             success: false,
             message: "Server error."
         });
-
     }
 };
 
-// Forget Password - Send OTP
+// ─── Forget Password — Send OTP (email) ───────────────────────────────────────
 exports.forgetPassword = async (req, res) => {
     try {
         const { email, new_password } = req.body;
-        console.log(req.body)
+
         if (!email?.trim()) {
             return res.status(400).json({
                 success: false,
@@ -535,10 +687,17 @@ exports.forgetPassword = async (req, res) => {
             });
         }
 
-        // Check if user exists
+        const chk = sanitizeRecipient(req.body.email);
+
+        if (!chk.ok) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter a valid email address",
+            });
+        }
         const [[user]] = await pool.query(
             "SELECT id, email, name FROM users WHERE email = ? LIMIT 1",
-            [email.toLowerCase()]
+            [email.toLowerCase().trim()]
         );
 
         if (!user) {
@@ -550,32 +709,29 @@ exports.forgetPassword = async (req, res) => {
 
         const otp = generateOTP();
 
-        // Save OTP and new password temporarily
+        // new_password stored temporarily, hashed only after OTP verify
         await pool.query(
-            `UPDATE users 
-       SET forget_otp = ?, 
-           new_password = ?,
-           forget_otp_expiry = DATE_ADD(NOW(), INTERVAL 5 MINUTE)
-       WHERE email = ?`,
-            [otp, new_password, email.toLowerCase()]
+            `UPDATE users
+             SET forget_otp = ?,
+                 new_password = ?,
+                 forget_otp_expiry = DATE_ADD(NOW(), INTERVAL 5 MINUTE)
+             WHERE id = ?`,
+            [otp, new_password, user.id]
         );
 
-        // Send OTP email
-        await sendEmail({
-            to: email,
-            subject: "EFOS Password Reset OTP",
-            html: `
-        <div style="font-family:sans-serif">
-          <h2>Password Reset Request</h2>
-          <p>Hello ${user.name},</p>
-          <p>Your OTP for password reset is:</p>
-          <h1 style="letter-spacing:6px; color:#6C63FF">${otp}</h1>
-          <p>This OTP will expire in 5 minutes.</p>
-          <p>If you didn't request this, please ignore this email.</p>
-        </div>
-      `,
-        });
+        const mail = await sendEmail({ to: user.email, subject: "...", html: `...` });
 
+        if (!mail.success) {
+            await pool.query(
+                `UPDATE users SET forget_otp = NULL, new_password = NULL, forget_otp_expiry = NULL WHERE id = ?`,
+                [user.id]
+            );
+
+            return res.status(500).json({
+                success: false,
+                message: "Unable to send OTP email. Please try again.",
+            });
+        }
         return res.json({
             success: true,
             message: "OTP has been sent to your email",
@@ -590,8 +746,7 @@ exports.forgetPassword = async (req, res) => {
     }
 };
 
-
-// Verify OTP and Reset Password
+// ─── Verify Forget Password OTP + Reset ───────────────────────────────────────
 exports.verifyForgetPasswordOtp = async (req, res) => {
     try {
         const { email, otp } = req.body;
@@ -603,14 +758,22 @@ exports.verifyForgetPasswordOtp = async (req, res) => {
             });
         }
 
-        // Verify OTP
+        const chk = sanitizeRecipient(req.body.email);
+
+        if (!chk.ok) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter a valid email address",
+            });
+        }
         const [[user]] = await pool.query(
-            `SELECT id, new_password 
-       FROM users 
-       WHERE email = ? 
-       AND forget_otp = ? 
-       AND forget_otp_expiry > NOW()`,
-            [email.toLowerCase(), otp]
+            `SELECT id, new_password
+             FROM users
+             WHERE email = ?
+               AND forget_otp = ?
+               AND forget_otp_expiry > NOW()
+             LIMIT 1`,
+            [email.toLowerCase().trim(), String(otp).trim()]
         );
 
         if (!user) {
@@ -627,18 +790,22 @@ exports.verifyForgetPasswordOtp = async (req, res) => {
             });
         }
 
-        // Hash the new password
         const hashedPassword = await bcrypt.hash(user.new_password, 12);
 
-        // Update password and clear OTP fields
         await pool.query(
-            `UPDATE users 
-       SET password = ?, 
-           forget_otp = NULL, 
-           new_password = NULL, 
-           forget_otp_expiry = NULL 
-       WHERE id = ?`,
+            `UPDATE users
+             SET password = ?,
+                 forget_otp = NULL,
+                 new_password = NULL,
+                 forget_otp_expiry = NULL
+             WHERE id = ?`,
             [hashedPassword, user.id]
+        );
+
+        // kill all old sessions after password change
+        await pool.query(
+            "UPDATE user_tokens SET is_revoked = 1 WHERE user_id = ?",
+            [user.id]
         );
 
         return res.json({
@@ -655,8 +822,7 @@ exports.verifyForgetPasswordOtp = async (req, res) => {
     }
 };
 
-
-// Resend OTP
+// ─── Resend Forget Password OTP ───────────────────────────────────────────────
 exports.resendForgetPasswordOtp = async (req, res) => {
     try {
         const { email } = req.body;
@@ -668,11 +834,20 @@ exports.resendForgetPasswordOtp = async (req, res) => {
             });
         }
 
-        const [[user]] = await pool.query(
-            "SELECT id, name FROM users WHERE email = ? LIMIT 1",
-            [email.toLowerCase()]
-        );
+        const normalizedEmail = email.toLowerCase().trim();
 
+        const [[user]] = await pool.query(
+            "SELECT id, name, email, new_password FROM users WHERE email = ? LIMIT 1",
+            [normalizedEmail]
+        );
+        const chk = sanitizeRecipient(normalizedEmail);
+
+        if (!chk.ok) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter a valid email address",
+            });
+        }
         if (!user) {
             return res.status(404).json({
                 success: false,
@@ -680,29 +855,45 @@ exports.resendForgetPasswordOtp = async (req, res) => {
             });
         }
 
+        if (!user.new_password) {
+            return res.status(400).json({
+                success: false,
+                message: "Reset session expired. Please start again.",
+            });
+        }
+
         const otp = generateOTP();
 
         await pool.query(
-            `UPDATE users 
-       SET forget_otp = ?, 
-           forget_otp_expiry = DATE_ADD(NOW(), INTERVAL 5 MINUTE)
-       WHERE email = ?`,
-            [otp, email.toLowerCase()]
+            `UPDATE users
+             SET forget_otp = ?,
+                 forget_otp_expiry = DATE_ADD(NOW(), INTERVAL 5 MINUTE)
+             WHERE id = ?`,
+            [otp, user.id]
         );
 
-        await sendEmail({
-            to: email,
+        const mail = await sendEmail({
+            to: user.email,
             subject: "EFOS Password Reset OTP",
             html: `
-        <div style="font-family:sans-serif">
-          <h2>New OTP for Password Reset</h2>
-          <p>Hello ${user.name},</p>
-          <p>Your new OTP is:</p>
-          <h1 style="letter-spacing:6px; color:#6C63FF">${otp}</h1>
-          <p>This OTP will expire in 5 minutes.</p>
-        </div>
-      `,
+                <div style="font-family:sans-serif">
+                    <h2>New OTP for Password Reset</h2>
+                    <p>Hello ${user.name},</p>
+                    <p>Your new OTP is:</p>
+                    <h1 style="letter-spacing:6px; color:#E53935">${otp}</h1>
+                    <p>This OTP will expire in 5 minutes.</p>
+                </div>
+            `,
         });
+
+        if (!mail.success) {
+            console.error("[resendForgetPasswordOtp] mail failed:", mail.error);
+
+            return res.status(500).json({
+                success: false,
+                message: "Unable to send OTP email right now. Please try again.",
+            });
+        }
 
         return res.json({
             success: true,
@@ -718,178 +909,78 @@ exports.resendForgetPasswordOtp = async (req, res) => {
     }
 };
 
-// ─── Login ────────────────────────────────────────────────────────────────────
-exports.loginUser = async (req, res) => {
+// ─── Change Password (logged-in user) ─────────────────────────────────────────
+exports.changePassword = async (req, res) => {
     try {
-        const { registration_number } = req.body;
+        const { current_password, new_password, new_password_confirmation } = req.body;
 
-        if (!registration_number?.trim()) {
+        if (!current_password || !new_password) {
             return res.status(400).json({
                 success: false,
-                message: "Registration number is required.",
+                message: "Current and new password are required.",
+            });
+        }
+
+        if (new_password.length < 6) {
+            return res.status(400).json({
+                success: false,
+                message: "New password must be at least 6 characters.",
+            });
+        }
+
+        if (
+            new_password_confirmation !== undefined &&
+            new_password !== new_password_confirmation
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Passwords do not match.",
             });
         }
 
         const [[user]] = await pool.query(
-            "SELECT * FROM users WHERE phone = ? LIMIT 1",
-            [registration_number.trim()]
+            "SELECT id, password FROM users WHERE id = ? LIMIT 1",
+            [req.user.id]
         );
 
         if (!user) {
-            return res.status(404).json({
+            return res.status(404).json({ success: false, message: "User not found." });
+        }
+
+        const ok = await bcrypt.compare(current_password, user.password || "");
+
+        if (!ok) {
+            return res.status(401).json({
                 success: false,
-                message: "No account found with this registration number.",
+                message: "Current password is incorrect.",
             });
         }
 
-        const otp = Math.floor(100000 + Math.random() * 900000).toString();
-
-        const expiry = new Date(Date.now() + 10 * 60 * 1000); // 10 Minutes
+        const hashed = await bcrypt.hash(new_password, 12);
 
         await pool.query(
-            `UPDATE users
-             SET login_otp = ?, login_otp_expiry = ?
-             WHERE id = ?`,
-            [otp, expiry, user.id]
+            "UPDATE users SET password = ?, updated_at = NOW() WHERE id = ?",
+            [hashed, user.id]
         );
-
-        const mobile =
-            user.phone.startsWith("91")
-                ? user.phone
-                : `91${user.phone}`;
-
-        const sms = await sendDltOtp(mobile, otp);
-
-        if (!sms.success) {
-            return res.status(500).json({
-                success: false,
-                message: "Unable to send OTP.",
-            });
-        }
 
         return res.json({
             success: true,
-            message: "OTP sent successfully.",
+            message: "Password changed successfully.",
         });
 
     } catch (error) {
-        console.error("[loginUser]", error);
-
+        console.error("[changePassword]", error);
         return res.status(500).json({
             success: false,
-            message: "Something went wrong.",
+            message: "Could not change password. Please try again.",
         });
     }
 };
 
-exports.verifyOtp = async (req, res) => {
-    try {
-
-        const { registration_number, otp } = req.body;
-
-        if (!registration_number || !otp) {
-            return res.status(400).json({
-                success: false,
-                message: "Registration number and OTP are required.",
-            });
-        }
-
-        const [[user]] = await pool.query(
-            `SELECT *
-             FROM users
-             WHERE phone = ?
-             LIMIT 1`,
-            [registration_number]
-        );
-
-        if (!user) {
-            return res.status(404).json({
-                success: false,
-                message: "User not found.",
-            });
-        }
-
-        if (!user.login_otp || user.login_otp !== otp) {
-            return res.status(400).json({
-                success: false,
-                message: "Invalid OTP.",
-            });
-        }
-
-        if (new Date(user.login_otp_expiry) < new Date()) {
-            return res.status(400).json({
-                success: false,
-                message: "OTP has expired.",
-            });
-        }
-
-        // Clear OTP
-        await pool.query(
-            `UPDATE users
-             SET login_otp = NULL,
-                 login_otp_expiry = NULL
-             WHERE id = ?`,
-            [user.id]
-        );
-
-        // JWT Tokens
-        const accessToken = signToken({ id: user.id });
-        const refreshToken = signRefreshToken({ id: user.id });
-
-        const device = req.headers["user-agent"] || "Unknown";
-        const ip =
-            req.headers["x-forwarded-for"] ||
-            req.socket.remoteAddress ||
-            req.ip;
-
-        await pool.query(
-            `INSERT INTO user_tokens
-            (user_id, refresh_token, device, user_agent, ip_address, expires_at)
-            VALUES
-            (?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 7 DAY))`,
-            [
-                user.id,
-                refreshToken,
-                device,
-                device,
-                ip,
-            ]
-        );
-
-        res.cookie("accessToken", accessToken, ACCESS_COOKIE_OPTIONS);
-
-        res.cookie("refreshToken", refreshToken, REFRESH_COOKIE_OPTIONS);
-
-        delete user.password;
-        delete user.login_otp;
-        delete user.login_otp_expiry;
-
-        return res.json({
-            success: true,
-            message: "Login successful.",
-            accessToken,
-            refreshToken,
-            user,
-        });
-
-    } catch (error) {
-
-        console.error("[verifyOtp]", error);
-
-        return res.status(500).json({
-            success: false,
-            message: "Something went wrong.",
-        });
-
-    }
-};
-
-
-// ─── Update Fcm token ────────────────────────────────────────────────────────────────────
+// ─── Update FCM token ─────────────────────────────────────────────────────────
 exports.updateFcmToken = async (req, res) => {
     try {
         const { fcm_token } = req.body;
-
 
         if (!fcm_token?.trim()) {
             return res.status(400).json({
@@ -913,12 +1004,12 @@ exports.updateFcmToken = async (req, res) => {
 
         return res.status(500).json({
             success: false,
-            message: error,
+            message: "Could not update FCM token.",
         });
     }
 };
 
-// ─── Update ────────────────────────────────────────────────────────────────────
+// ─── Update Profile ───────────────────────────────────────────────────────────
 exports.updateProfile = async (req, res) => {
     try {
         const { name, email, phone } = req.body;
@@ -928,7 +1019,7 @@ exports.updateProfile = async (req, res) => {
         if (name !== undefined && !name?.trim()) errors.name = "Name cannot be empty";
         if (email !== undefined) {
             if (!email?.trim()) errors.email = "Email cannot be empty";
-            else if (!email.includes("@")) errors.email = "Invalid email format";
+            else if (!EMAIL_REGEX.test(email.trim())) errors.email = "Invalid email format";
         }
         if (phone !== undefined && !phone?.trim()) errors.phone = "Phone cannot be empty";
 
@@ -936,7 +1027,6 @@ exports.updateProfile = async (req, res) => {
             return res.status(422).json({ success: false, message: errors });
         }
 
-        // ─── Fetch Current User ───────────────────────────────────────────────
         const [[currentUser]] = await pool.query(
             "SELECT id, name, email, phone FROM users WHERE id = ? LIMIT 1",
             [req.user.id]
@@ -955,7 +1045,6 @@ exports.updateProfile = async (req, res) => {
         const isEmailChanging = normalizedEmail && normalizedEmail !== currentUser.email;
         const isPhoneChanging = normalizedPhone && normalizedPhone !== currentUser.phone;
 
-        // ─── Check Conflicts ──────────────────────────────────────────────────
         if (isEmailChanging || isPhoneChanging) {
             const conditions = [];
             const params = [];
@@ -988,7 +1077,6 @@ exports.updateProfile = async (req, res) => {
             }
         }
 
-        // ─── Build Update Payload ─────────────────────────────────────────────
         const updatedName = name?.trim() || currentUser.name;
         const updatedEmail = normalizedEmail || currentUser.email;
         const updatedPhone = normalizedPhone || currentUser.phone;
@@ -1021,7 +1109,7 @@ exports.updateProfile = async (req, res) => {
 // ─── Refresh Token ────────────────────────────────────────────────────────────
 exports.refreshToken = async (req, res) => {
     try {
-        const token = req.cookies?.refreshToken;
+        const token = req.cookies?.refreshToken || req.body?.refreshToken;
 
         if (!token) {
             return res.status(401).json({
@@ -1052,7 +1140,6 @@ exports.refreshToken = async (req, res) => {
             });
         }
 
-        // Token rotation — revoke old, issue new
         await pool.query(
             "UPDATE user_tokens SET is_revoked = 1 WHERE refresh_token = ?",
             [token]
@@ -1073,7 +1160,12 @@ exports.refreshToken = async (req, res) => {
         res.cookie("accessToken", newAccessToken, ACCESS_COOKIE_OPTIONS);
         res.cookie("refreshToken", newRefreshToken, REFRESH_COOKIE_OPTIONS);
 
-        return res.json({ accessToken: newAccessToken, refreshToken: newRefreshToken, success: true, message: "Session refreshed." });
+        return res.json({
+            success: true,
+            accessToken: newAccessToken,
+            refreshToken: newRefreshToken,
+            message: "Session refreshed.",
+        });
 
     } catch (error) {
         console.error("[refreshToken]", error);
@@ -1087,7 +1179,7 @@ exports.refreshToken = async (req, res) => {
 // ─── Logout ───────────────────────────────────────────────────────────────────
 exports.logoutUser = async (req, res) => {
     try {
-        const token = req.cookies?.refreshToken;
+        const token = req.cookies?.refreshToken || req.body?.refreshToken;
 
         if (token) {
             await pool.query(
@@ -1140,19 +1232,10 @@ exports.getProfile = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // user basic profile
         const [[user]] = await pool.query(
-            `SELECT 
-                id,
-                name,
-                email,
-                phone,
-                google_id,
-                role,
-                email_verified_at,
-                created_at,
-                updated_at,
-                avatarUrl
+            `SELECT
+                id, name, email, phone, google_id, role,
+                email_verified_at, created_at, updated_at, avatarUrl
              FROM users
              WHERE id = ?
              LIMIT 1`,
@@ -1166,7 +1249,6 @@ exports.getProfile = async (req, res) => {
             });
         }
 
-        // total purchased courses by user_id
         const [[courseBuy]] = await pool.query(
             `SELECT COUNT(*) AS total_courses
              FROM course_buys
@@ -1174,18 +1256,13 @@ exports.getProfile = async (req, res) => {
             [userId]
         );
 
-        // check student profile id from user_id
         const [[student]] = await pool.query(
-            `SELECT *
-             FROM students
-             WHERE user_id = ?
-             LIMIT 1`,
+            `SELECT * FROM students WHERE user_id = ? LIMIT 1`,
             [userId]
         );
 
         let totalApply = 0;
 
-        // if student exists then count applied jobs
         if (student) {
             const [[applyCount]] = await pool.query(
                 `SELECT COUNT(*) AS total_apply
@@ -1200,7 +1277,7 @@ exports.getProfile = async (req, res) => {
         return res.json({
             success: true,
             user,
-            student: student ? student : null,
+            student: student || null,
             stats: {
                 total_courses: courseBuy.total_courses || 0,
                 total_apply: totalApply,
@@ -1225,10 +1302,7 @@ exports.deleteUser = async (req, res) => {
             [req.user.id]
         );
 
-        await pool.query(
-            "DELETE FROM users WHERE id = ?",
-            [req.user.id]
-        );
+        await pool.query("DELETE FROM users WHERE id = ?", [req.user.id]);
 
         res.clearCookie("accessToken");
         res.clearCookie("refreshToken");
@@ -1247,15 +1321,11 @@ exports.deleteUser = async (req, res) => {
     }
 };
 
-
-
-
-
+// ─── Update Student Profile ───────────────────────────────────────────────────
 exports.updateStudentProfile = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // Find student by user id
         const [students] = await pool.query(
             `SELECT id FROM students WHERE user_id = ? LIMIT 1`,
             [userId]
@@ -1269,62 +1339,21 @@ exports.updateStudentProfile = async (req, res) => {
         }
 
         const studentId = students[0].id;
-
+        console.log(req.body)
         const {
-            name,
-            phone,
-            email,
-            whatsapp,
-            age_group,
-            gender,
-            present_status,
-            state,
-            district,
-            pincode,
-            address,
-            looking_for,
-            profile_summary,
-
-            father_name,
-            mother_name,
-            category,
-            blood_group,
-
+            name, phone, email, whatsapp, age_group, gender, present_status,
+            state, district, pincode, address, looking_for, profile_summary,
+            father_name, mother_name, category, blood_group,
             highest_qualification,
-
-            tenth_board,
-            tenth_year,
-            tenth_marks,
-            tenth_stream,
-
-            twelfth_board,
-            twelfth_year,
-            twelfth_marks,
-            twelfth_stream,
-
-            graduation_university,
-            graduation_year,
-            graduation_marks,
-            graduation_stream,
-            graduation_field,
-
-            pg_university,
-            pg_year,
-            pg_marks,
-            pg_stream,
-            pg_field,
-
-            skill_type,
-            skill_trade,
-            skill_year,
-
-            experience_type,
-            passport,
-            relocation
+            tenth_board, tenth_year, tenth_marks, tenth_stream,
+            twelfth_board, twelfth_year, twelfth_marks, twelfth_stream,
+            graduation_university, graduation_year, graduation_marks,
+            graduation_stream, graduation_field,
+            pg_university, pg_year, pg_marks, pg_stream, pg_field,
+            skill_type, skill_trade, skill_year,
+            experience_type, passport, relocation
         } = req.body;
 
-
-        // Validation
         const errors = {};
 
         if (!name?.trim()) errors.name = "Name is required";
@@ -1334,7 +1363,7 @@ exports.updateStudentProfile = async (req, res) => {
         if (!district?.trim()) errors.district = "District is required";
         if (!highest_qualification?.trim()) errors.highest_qualification = "Highest qualification is required";
 
-        if (email && !email.includes("@")) {
+        if (email && !EMAIL_REGEX.test(email.trim())) {
             errors.email = "Invalid email";
         }
 
@@ -1345,126 +1374,43 @@ exports.updateStudentProfile = async (req, res) => {
             });
         }
 
-        // Photo Upload
         let photoPath = null;
 
         if (req.file) {
             photoPath = req.file.path.replace(/\\/g, "/");
         }
 
-        // Update Query
         await pool.query(
             `UPDATE students SET
-                name = ?,
-                phone = ?,
-                email = ?,
-                whatsapp = ?,
-                age_group = ?,
-                gender = ?,
-                present_status = ?,
-                state = ?,
-                district = ?,
-                pincode = ?,
-                address = ?,
-                looking_for = ?,
-                profile_summary = ?,
-
-                father_name = ?,
-                mother_name = ?,
-                category = ?,
-                blood_group = ?,
-
+                name = ?, phone = ?, email = ?, whatsapp = ?, age_group = ?,
+                gender = ?, present_status = ?, state = ?, district = ?,
+                pincode = ?, address = ?, looking_for = ?, profile_summary = ?,
+                father_name = ?, mother_name = ?, category = ?, blood_group = ?,
                 highest_qualification = ?,
-
-                tenth_board = ?,
-                tenth_year = ?,
-                tenth_marks = ?,
-                tenth_stream = ?,
-
-                twelfth_board = ?,
-                twelfth_year = ?,
-                twelfth_marks = ?,
-                twelfth_stream = ?,
-
-                graduation_university = ?,
-                graduation_year = ?,
-                graduation_marks = ?,
-                graduation_stream = ?,
-                graduation_field = ?,
-
-                pg_university = ?,
-                pg_year = ?,
-                pg_marks = ?,
-                pg_stream = ?,
-                pg_field = ?,
-
-                skill_type = ?,
-                skill_trade = ?,
-                skill_year = ?,
-
-                experience_type = ?,
-                passport = ?,
-                relocation = ?,
-
+                tenth_board = ?, tenth_year = ?, tenth_marks = ?, tenth_stream = ?,
+                twelfth_board = ?, twelfth_year = ?, twelfth_marks = ?, twelfth_stream = ?,
+                graduation_university = ?, graduation_year = ?, graduation_marks = ?,
+                graduation_stream = ?, graduation_field = ?,
+                pg_university = ?, pg_year = ?, pg_marks = ?, pg_stream = ?, pg_field = ?,
+                skill_type = ?, skill_trade = ?, skill_year = ?,
+                experience_type = ?, passport = ?, relocation = ?,
                 photo = COALESCE(?, photo),
                 profile_completed = 'completed',
                 updated_at = NOW()
-
              WHERE id = ?`,
             [
-                name,
-                phone,
-                email,
-                whatsapp,
-                age_group,
-                gender,
-                present_status,
-                state,
-                district,
-                pincode,
-                address,
-                looking_for,
-                profile_summary,
-
-                father_name,
-                mother_name,
-                category,
-                blood_group,
-
+                name, phone, email, whatsapp, age_group, gender, present_status,
+                state, district, pincode, address, looking_for, profile_summary,
+                father_name, mother_name, category, blood_group,
                 highest_qualification,
-
-                tenth_board,
-                tenth_year,
-                tenth_marks,
-                tenth_stream,
-
-                twelfth_board,
-                twelfth_year,
-                twelfth_marks,
-                twelfth_stream,
-
-                graduation_university,
-                graduation_year,
-                graduation_marks,
-                graduation_stream,
-                graduation_field,
-
-                pg_university,
-                pg_year,
-                pg_marks,
-                pg_stream,
-                pg_field,
-
-                skill_type,
-                skill_trade,
-                skill_year,
-
-                experience_type,
-                passport,
-                relocation,
-
-                photoPath,
-                studentId
+                tenth_board, tenth_year, tenth_marks, tenth_stream,
+                twelfth_board, twelfth_year, twelfth_marks, twelfth_stream,
+                graduation_university, graduation_year, graduation_marks,
+                graduation_stream, graduation_field,
+                pg_university, pg_year, pg_marks, pg_stream, pg_field,
+                skill_type, skill_trade, skill_year,
+                experience_type, passport, relocation,
+                photoPath, studentId
             ]
         );
 
@@ -1474,7 +1420,7 @@ exports.updateStudentProfile = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("UpdateStudentProfile Error:", error);
+        console.error("[updateStudentProfile]", error);
 
         return res.status(500).json({
             success: false,
@@ -1483,6 +1429,3 @@ exports.updateStudentProfile = async (req, res) => {
         });
     }
 };
-
-
-

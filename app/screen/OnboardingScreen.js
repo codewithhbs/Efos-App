@@ -24,7 +24,6 @@ export default function OnboardingScreen({ navigation }) {
     try {
       const res = await API.get("/extra/onboard-slides");
 
-
       if (res.data?.success && res.data?.data?.length > 0) {
         // Clean the third item's broken image_url (remove duplicate)
         const cleanedSlides = res.data.data.map((slide, idx) => {

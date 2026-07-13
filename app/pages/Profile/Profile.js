@@ -10,6 +10,7 @@ import {
     StatusBar,
     Switch,
     ActivityIndicator,
+    Linking,
 } from "react-native";
 
 import { Ionicons } from "@expo/vector-icons";
@@ -39,7 +40,7 @@ const MENU_SECTIONS = [
             },
             {
                 icon: "briefcase-outline",
-                label: "Applications",
+                label: "Applied Opportunities",
                 color: "#10B981",
                 route: "applications",
             },
@@ -78,13 +79,13 @@ const MENU_SECTIONS = [
                 icon: "help-circle-outline",
                 label: "Help & Support",
                 color: "#14B8A6",
-                route: "Support",
+                link: "https://efos.in/contact-us",
             },
             {
                 icon: "information-circle-outline",
                 label: "About EFOS",
                 color: "#3B82F6",
-                route: "About",
+                link: "https://efos.in/our-story",
             },
         ],
     },
@@ -339,7 +340,7 @@ export function ProfileScreen({ navigation }) {
                         <TouchableOpacity
                             style={styles.editBtn}
                             onPress={() =>
-                                navigation.navigate("EditProfile")
+                                navigation.navigate("ResumeBuilder")
                             }
                         >
 
@@ -465,69 +466,7 @@ export function ProfileScreen({ navigation }) {
 
                 {/* BIOMETRIC */}
 
-                <View style={styles.section}>
-
-                    <Text style={styles.sectionLabel}>
-                        Security
-                    </Text>
-
-                    <View style={styles.menuCard}>
-
-                        <View style={styles.menuItem}>
-
-                            <View
-                                style={[
-                                    styles.menuIconBox,
-                                    {
-                                        backgroundColor:
-                                            "#4F46E515",
-                                    },
-                                ]}
-                            >
-
-                                <Ionicons
-                                    name="finger-print-outline"
-                                    size={18}
-                                    color="#4F46E5"
-                                />
-
-                            </View>
-
-                            <View style={{ flex: 1 }}>
-
-                                <Text style={styles.menuLabel}>
-                                    Biometric Lock
-                                </Text>
-
-                                <Text style={styles.subTitle}>
-                                    Face ID / Fingerprint
-                                </Text>
-
-                            </View>
-
-                            {checkingBio ? (
-                                <ActivityIndicator
-                                    size="small"
-                                    color={COLORS.primary}
-                                />
-                            ) : (
-                                <Switch
-                                    value={biometricEnabled}
-                                    onValueChange={
-                                        handleBiometricToggle
-                                    }
-                                    trackColor={{
-                                        false: "#D1D5DB",
-                                        true: COLORS.primary,
-                                    }}
-                                />
-                            )}
-
-                        </View>
-
-                    </View>
-
-                </View>
+               
 
                 {/* MENU */}
 
@@ -555,9 +494,7 @@ export function ProfileScreen({ navigation }) {
                                         styles.menuItemLast,
                                     ]}
                                     activeOpacity={0.7}
-                                    onPress={() =>
-                                        item.route &&
-                                        navigation.navigate(item.route)
+                                    onPress={() => item.link ? Linking.openURL(item.link) : navigation.navigate(item.route)
                                     }
                                 >
 

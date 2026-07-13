@@ -1,63 +1,41 @@
 const express = require("express");
 const router = express.Router();
 
-
-const {
-    registerUser,
-    loginUser,
-    refreshToken,
-    logoutUser,
-    logoutAllDevices,
-    getProfile,
-    deleteUser,
-    updateProfile,
-    updateFcmToken,
-    forgetPassword,
-    verifyForgetPasswordOtp,
-    resendForgetPasswordOtp,
-    updateStudentProfile,
-    verifyOtp,
-    verifyRegisterOtp,
-    resendLoginOtp,
-    resendRegisterOtp,
-} = require("../controllers/auth.controller");
+const auth = require("../controllers/auth.controller");
 const authMiddleware = require("../middleware/authMiddleware");
 const { loginLimiter } = require("../middleware/rateLimiter");
 const { createOrder, verifyPayment, getAvailableCoupon, applyCoupon, getAllMyEnrolledCourses, getMyAllMentorSessions, getMyAllApplications, getAllMyPayments } = require("../controllers/order.controller");
 const upload = require("../middleware/multer");
 
-// ========================
-// PUBLIC ROUTES
-// ========================
-router.post("/register", registerUser);
-router.post("/verify-register-otp", verifyRegisterOtp);
+// ─── Register ────────────────────────────────────────────────
+router.post("/register", auth.registerUser);
+router.post("/verify-register-otp", auth.verifyRegisterOtp);
+router.post("/resend-register-otp", auth.resendRegisterOtp);
+ 
+// ─── Login (dual: password | otp) ────────────────────────────
+// body: { registration_number, mode: "password" | "otp", password? }
+router.post("/login", auth.loginUser);
+router.post("/verify-otp", auth.verifyOtp);
+router.post("/resend-login-otp", auth.resendLoginOtp);
+ 
+// ─── Forget Password ─────────────────────────────────────────
+router.post("/forget-password", auth.forgetPassword);
+router.post("/verify-forget-password", auth.verifyForgetPasswordOtp);
+router.post("/resend-forget-password-otp", auth.resendForgetPasswordOtp);
+ 
+// ─── Session ─────────────────────────────────────────────────
+router.post("/refresh-token", auth.refreshToken);
+router.post("/logout", auth.logoutUser);
+router.post("/logout-all", authMiddleware, auth.logoutAllDevices);
+ 
+// ─── Profile ─────────────────────────────────────────────────
+router.get("/me", authMiddleware, auth.getProfile);
+router.put("/update", authMiddleware, auth.updateProfile);
+router.post("/update-student-profile", authMiddleware,upload.single('photo'), auth.updateStudentProfile);
 
-router.post("/resend-login-otp", resendLoginOtp);
-
-router.post("/resend-register-otp", resendRegisterOtp);
-router.post("/login", loginLimiter, loginUser);
-router.post("/verify-otp", loginLimiter, verifyOtp);
-
-
-
-router.post("/refresh-token", refreshToken);
-router.post("/forget-password", forgetPassword);
-router.post("/verify-forget-password", verifyForgetPasswordOtp);
-router.post("/resend-forget-password-otp", resendForgetPasswordOtp);
-
-
-// ========================
-// PROTECTED ROUTES
-// ========================
-router.use(authMiddleware);
-
-router.get("/me", getProfile);
-router.post("/logout", logoutUser);
-router.put("/update", updateProfile);
-router.put("/update-fcm", updateFcmToken);
-router.post("/logout-all", logoutAllDevices);
-router.delete("/delete-account", deleteUser);
-router.post("/update-student-profile", upload.single("photo"), updateStudentProfile);
+router.post("/change-password", authMiddleware, auth.changePassword);
+router.post("/fcm-token", authMiddleware, auth.updateFcmToken);
+router.delete("/delete-account", authMiddleware, auth.deleteUser);
 
 // ========================
 // ORDER ROUTES

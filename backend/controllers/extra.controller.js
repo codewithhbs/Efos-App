@@ -611,3 +611,125 @@ exports.getAppEvents = async (req, res) => {
     });
   }
 }
+
+
+exports.getBlogs = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, forHome } = req.query;
+
+    let sql = `
+      SELECT
+        id,
+        category_id,
+        user_id,
+        name,
+        slug,
+        short_content,
+        image,
+        created_at
+      FROM blogs
+      WHERE status = 1
+    `;
+
+    let params = [];
+
+    // Home API -> return latest 10 blogs
+    if (forHome === "true") {
+      sql += ` ORDER BY id DESC LIMIT 10`;
+    } else {
+      const pageNum = Math.max(parseInt(page, 10) || 1, 1);
+      const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
+      const offset = (pageNum - 1) * limitNum;
+
+      sql += ` ORDER BY id DESC LIMIT ? OFFSET ?`;
+      params.push(limitNum, offset);
+    }
+
+    const [blogs] = await pool.query(sql, params);
+
+    const data = blogs.map((blog) => ({
+      ...blog,
+      image: blog.image
+        ? `${process.env.APP_API_URL}${blog.image}`
+        : null,
+    }));
+
+    // For Home API, no pagination metadata
+    if (forHome === "true") {
+      return res.status(200).json({
+        success: true,
+        message: "Blogs fetched successfully.",
+        data,
+      });
+    }
+
+    // Pagination metadata
+    const [[{ total }]] = await pool.query(
+      `SELECT COUNT(*) AS total FROM blogs WHERE status = 1`
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Blogs fetched successfully.",
+      data,
+      pagination: {
+        total,
+        page: parseInt(page, 10) || 1,
+        limit: parseInt(limit, 10) || 10,
+        totalPages: Math.ceil(total / (parseInt(limit, 10) || 10)),
+      },
+    });
+  } catch (error) {
+    console.error("getBlogs Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};
+
+exports.singleBlog = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [blogs] = await pool.query(
+      `
+      SELECT *
+      FROM blogs
+      WHERE id = ? AND status = 1
+      LIMIT 1
+      `,
+      [id]
+    );
+
+    if (blogs.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Blog not found.",
+      });
+    }
+
+    const blog = {
+      ...blogs[0],
+      image: blogs[0].image
+        ? `${process.env.APP_API_URL}${blogs[0].image}`
+        : null,
+    };
+
+    return res.status(200).json({
+      success: true,
+      message: "Blog fetched successfully.",
+      data: blog,
+    });
+  } catch (error) {
+    console.error("singleBlog Error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal Server Error",
+      error: error.message,
+    });
+  }
+};

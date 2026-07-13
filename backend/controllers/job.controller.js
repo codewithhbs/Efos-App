@@ -40,48 +40,73 @@ exports.findJobs = async (req, res) => {
         const offset = (parsedPage - 1) * parsedLimit;
 
         // ==================================
-        // DYNAMIC WHERE CLAUSE
+        // BUILD FILTERS
         // ==================================
-        let whereClause = `WHERE status = ? AND is_featured = ?`;
-        const queryParams = [status, is_featured];
+        let filters = `status = ?`;
+        const commonParams = [status];
 
-        // First Priority = job_category_id
+        // Priority 1 -> Category
         if (category) {
-            whereClause += ` AND job_category_id = ?`;
-            queryParams.push(category);
+            filters += ` AND job_category_id = ?`;
+            commonParams.push(category);
         }
-
-        // Second Priority = job_sub_category_id
+        // Priority 2 -> Sub Category
         else if (sub_category) {
-            whereClause += ` AND job_sub_category_id = ?`;
-            queryParams.push(sub_category);
+            filters += ` AND job_sub_category_id = ?`;
+            commonParams.push(sub_category);
         }
 
         // ==================================
-        // GET JOBS
+        // FUNCTION TO FETCH JOBS
         // ==================================
-        const [jobs] = await pool.query(
-            `
-            SELECT
-                id,
-                title,
-                company_logo,
-                company_name,
-                salary,
-                work_mode,
-                education,
-                short_description,
-                slug,
-                job_category_id,
-                job_sub_category_id,
-                created_at
-            FROM jobs
-            ${whereClause}
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-            `,
-            [...queryParams, parsedLimit, offset]
-        );
+        const getJobs = async (featuredValue) => {
+            const [rows] = await pool.query(
+                `
+                SELECT
+                    id,
+                    title,
+                    company_logo,
+                    company_name,
+                    salary,
+                    work_mode,
+                    education,
+                    short_description,
+                    slug,
+                    job_category_id,
+                    job_sub_category_id,
+                    is_featured,
+                    created_at
+                FROM jobs
+                WHERE ${filters}
+                AND is_featured = ?
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+                `,
+                [
+                    ...commonParams,
+                    featuredValue,
+                    parsedLimit,
+                    offset,
+                ]
+            );
+
+            return rows;
+        };
+
+        // ==================================
+        // FETCH FEATURED JOBS
+        // ==================================
+        let jobs = await getJobs(Number(is_featured));
+
+        // ==================================
+        // FALLBACK TO NON-FEATURED JOBS
+        // ==================================
+        if (
+            jobs.length === 0 &&
+            Number(is_featured) === 1
+        ) {
+            jobs = await getJobs(0);
+        }
 
         // ==================================
         // NO JOBS FOUND
@@ -91,15 +116,15 @@ exports.findJobs = async (req, res) => {
                 success: true,
                 count: 0,
                 page: parsedPage,
+                limit: parsedLimit,
                 data: [],
                 message: "No jobs found",
             });
         }
 
-        const baseUrl =
-            process.env.APP_API_URL || "";
+        const baseUrl = process.env.APP_API_URL || "";
 
-        // default false
+        // Default applied status
         jobs.forEach((job) => {
             job.is_applied = false;
         });
@@ -121,55 +146,43 @@ exports.findJobs = async (req, res) => {
             );
 
             if (students.length > 0) {
-                const studentId =
-                    students[0].id;
+                const studentId = students[0].id;
 
-                const jobIds = jobs.map(
-                    (job) => job.id
+                const jobIds = jobs.map((job) => job.id);
+
+                const [applications] = await pool.query(
+                    `
+                    SELECT job_id
+                    FROM job_applications
+                    WHERE student_id = ?
+                    AND job_id IN (?)
+                    `,
+                    [studentId, jobIds]
                 );
 
-                const [applications] =
-                    await pool.query(
-                        `
-                        SELECT job_id
-                        FROM job_applications
-                        WHERE student_id = ?
-                        AND job_id IN (?)
-                        `,
-                        [studentId, jobIds]
-                    );
-
-                const appliedIds =
-                    applications.map(
-                        (item) =>
-                            item.job_id
-                    );
+                const appliedIds = applications.map(
+                    (item) => item.job_id
+                );
 
                 jobs.forEach((job) => {
-                    job.is_applied =
-                        appliedIds.includes(
-                            job.id
-                        );
+                    job.is_applied = appliedIds.includes(
+                        job.id
+                    );
                 });
             }
         }
 
         // ==================================
-        // FORMAT DATA
+        // FORMAT RESPONSE
         // ==================================
-        const formatted = jobs.map(
-            (job) => ({
-                ...job,
-                company_logo:
-                    job.company_logo
-                        ? job.company_logo.startsWith(
-                            "http"
-                        )
-                            ? job.company_logo
-                            : `${baseUrl}/${job.company_logo}`
-                        : null,
-            })
-        );
+        const formatted = jobs.map((job) => ({
+            ...job,
+            company_logo: job.company_logo
+                ? job.company_logo.startsWith("http")
+                    ? job.company_logo
+                    : `${baseUrl}/${job.company_logo}`
+                : null,
+        }));
 
         // ==================================
         // RESPONSE
@@ -181,20 +194,14 @@ exports.findJobs = async (req, res) => {
             limit: parsedLimit,
             data: formatted,
         });
-
     } catch (error) {
-        console.error(
-            "FindJobs Error:",
-            error
-        );
+        console.error("FindJobs Error:", error);
 
         return res.status(500).json({
             success: false,
-            message:
-                "Something went wrong",
+            message: "Something went wrong",
             error:
-                process.env.NODE_ENV ===
-                    "development"
+                process.env.NODE_ENV === "development"
                     ? error.message
                     : undefined,
         });

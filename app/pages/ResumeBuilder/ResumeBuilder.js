@@ -1,593 +1,851 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import {
     View,
     Text,
     StyleSheet,
     ScrollView,
-    TextInput,
     TouchableOpacity,
-    Dimensions,
     Image,
     Alert,
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
-    SafeAreaView,
-} from 'react-native';
+    StatusBar,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import * as ImagePicker from "expo-image-picker";
+import { Ionicons } from "@expo/vector-icons";
+import { LinearGradient } from "expo-linear-gradient";
+import * as Print from "expo-print";
+import * as Sharing from "expo-sharing";
+import * as FileSystem from "expo-file-system/legacy";
 
-import * as ImagePicker from 'expo-image-picker';
-import { Ionicons } from '@expo/vector-icons';
-import { LinearGradient } from 'expo-linear-gradient';
-import * as Print from 'expo-print';
-import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as IntentLauncher from 'expo-intent-launcher';
-import API from '../../utils/axiosInstanct'; // Keep your API instance
-import useAuthStore from '../../store/useAuthStore';
+import API from "../../utils/axiosInstanct";
+import useAuthStore from "../../store/useAuthStore";
+const EFOS_TAGLINE = "Education Future One Stop";
+export const EFOS_SITE = "efos.in";
+const EFOS_LOGO_BASE64 = "https://efos.in/public/assets/images/logo/logo.jpg";
+import {
+    Field,
+    SelectField,
+    Row,
+    Col,
+    Section,
+    C,
+} from "../../components/FormFields";
+import {
+    STATE_OPTIONS,
+    getDistrictOptions,
+    AGE_GROUP_OPTIONS,
+    GENDER_OPTIONS,
+    QUALIFICATION_OPTIONS,
+    PRESENT_STATUS_OPTIONS,
+    LOOKING_FOR_OPTIONS,
+    CATEGORY_OPTIONS,
+    BLOOD_GROUP_OPTIONS,
+    BOARD_OPTIONS,
+    SCHOOL_STREAM_OPTIONS,
+    GRAD_STREAM_OPTIONS,
+    PG_STREAM_OPTIONS,
+    SKILL_TYPE_OPTIONS,
+    SKILL_TRADE_OPTIONS,
+    EXPERIENCE_YEAR_OPTIONS,
+    EXPERIENCE_TYPE_OPTIONS,
+    PASSPORT_OPTIONS,
+    RELOCATION_OPTIONS,
+    YEAR_OPTIONS,
+} from "../../utils/formOptions";
 
-const { width } = Dimensions.get('window');
-
-const steps = [
-    'Basic Information',
-    'Personal Details',
-    'Education Details',
-    'Skills & Career',
+const STEPS = [
+    { title: "Basic Information", icon: "person-outline" },
+    { title: "Personal Details", icon: "people-outline" },
+    { title: "Education", icon: "school-outline" },
+    { title: "Skills & Career", icon: "briefcase-outline" },
 ];
-function AlreadyFilledScreen({ student, onGeneratePDF, onEdit, generatingPdf, stepCompletionStatus, isProfileComplete }) {
-    const fields = [
-        { label: 'Name', value: student?.name },
-        { label: 'Email', value: student?.email },
-        { label: 'Phone', value: student?.phone },
-        { label: 'State', value: student?.state },
-        { label: 'District', value: student?.district },
-        { label: 'Qualification', value: student?.highest_qualification },
-        { label: 'Skill', value: student?.skill_trade },
-        { label: 'Experience', value: student?.skill_year ? `${student.skill_year} yrs` : null },
-    ].filter(f => f.value);
 
-    return (
-        <SafeAreaView style={styles.safeArea}>
-            <LinearGradient colors={['#d92828', '#e54646', '#f45555']} style={styles.header}>
-                <View style={styles.headerContent}>
-                    <Text style={styles.headerTitle}>Resume Builder</Text>
-                    <Text style={styles.headerSubtitle}>Your profile overview</Text>
-                </View>
-            </LinearGradient>
+const EMPTY = {
+    name: "", phone: "", email: "", whatsapp: "",
+    age_group: "", gender: "", present_status: "",
+    state: "", district: "", pincode: "", address: "",
 
-            <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+    father_name: "", mother_name: "", category: "",
+    blood_group: "", profile_summary: "",
 
-                {/* Step completion status */}
-                <Text style={[styles.sectionTitle, { marginTop: 0, marginBottom: 12 }]}>Section Status</Text>
-                {steps.map((stepName, i) => (
-                    <View key={i} style={{
-                        flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                        backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 10,
-                        borderWidth: 1.5, borderColor: stepCompletionStatus[i] ? '#D1FAE5' : '#FEE2E2',
-                    }}>
-                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                            <View style={{
-                                width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
-                                backgroundColor: stepCompletionStatus[i] ? '#D1FAE5' : '#FEE2E2',
-                            }}>
-                                <Ionicons
-                                    name={stepCompletionStatus[i] ? 'checkmark' : 'alert'}
-                                    size={16}
-                                    color={stepCompletionStatus[i] ? '#059669' : '#DC2626'}
-                                />
-                            </View>
-                            <Text style={{ fontSize: 14, fontWeight: '700', color: '#1E2937' }}>{stepName}</Text>
-                        </View>
-                        {stepCompletionStatus[i]
-                            ? <Text style={{ fontSize: 12, fontWeight: '700', color: '#059669' }}>Complete</Text>
-                            : <TouchableOpacity onPress={onEdit}>
-                                <Text style={{ fontSize: 12, fontWeight: '700', color: '#DC2626' }}>Incomplete — Fill Now</Text>
-                            </TouchableOpacity>
-                        }
-                    </View>
-                ))}
+    highest_qualification: "",
+    tenth_board: "", tenth_year: "", tenth_marks: "", tenth_stream: "",
+    twelfth_board: "", twelfth_year: "", twelfth_marks: "", twelfth_stream: "",
+    graduation_university: "", graduation_year: "", graduation_marks: "",
+    graduation_stream: "", graduation_field: "",
+    pg_university: "", pg_year: "", pg_marks: "", pg_stream: "", pg_field: "",
 
-                {/* Saved details */}
-                <View style={{ backgroundColor: '#fff', borderRadius: 20, padding: 20, borderWidth: 1.5, borderColor: '#E2E8F0', marginTop: 8, marginBottom: 20 }}>
-                    <Text style={[styles.sectionTitle, { marginTop: 0 }]}>Saved Details</Text>
-                    {fields.map((f, i) => (
-                        <View key={i} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: i < fields.length - 1 ? 1 : 0, borderBottomColor: '#F1F5F9' }}>
-                            <Text style={{ color: '#64748B', fontSize: 14, fontWeight: '600' }}>{f.label}</Text>
-                            <Text style={{ color: '#111827', fontSize: 14, fontWeight: '700', maxWidth: '60%', textAlign: 'right' }}>{f.value}</Text>
-                        </View>
-                    ))}
-                </View>
+    skill_type: "", skill_trade: "", skill_year: "",
+    looking_for: "", experience_type: "", passport: "", relocation: "",
+};
 
-            </ScrollView>
-
-            <View style={styles.bottomNav}>
-                <TouchableOpacity style={[styles.navButton, { flex: 1 }]} onPress={onEdit}>
-                    <Ionicons name="create-outline" size={18} color="#4F46E5" />
-                    <Text style={styles.navButtonText}>Update Details</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity style={[styles.nextButton, !isProfileComplete && { opacity: 0.5 }]} onPress={onGeneratePDF} disabled={generatingPdf || !stepCompletionStatus.every(Boolean)}>
-                    <LinearGradient colors={['#e12e4c', '#e12e4c']} style={styles.nextGradient}>
-                        {generatingPdf
-                            ? <ActivityIndicator color="#fff" />
-                            : <>
-                                <Ionicons name="download-outline" size={18} color="#fff" />
-                                <Text style={styles.nextButtonText}>Download Resume</Text>
-                            </>
-                        }
-                    </LinearGradient>
-                </TouchableOpacity>
-            </View>
-        </SafeAreaView>
-    );
-}
-export default function ResumeBuilder({ navigation }) {
-    const [step, setStep] = useState(0);
-    const [loading, setLoading] = useState(false);
-    const { student, fetchProfile } = useAuthStore()
-    const [generatingPdf, setGeneratingPdf] = useState(false);
-    const [form, setForm] = useState({
-        // Basic Information
-        name: '',
-        phone: '',
-        email: '',
-        whatsapp: '',
-        age_group: '',
-        gender: '',
-        present_status: '',
-        state: '',
-        district: '',
-        pincode: '',
-        address: '',
-
-        // Personal Details
-        father_name: '',
-        mother_name: '',
-        category: '',
-        blood_group: '',
-        profile_summary: '',
-
-        // Education
-        highest_qualification: '',
-
-        tenth_board: '',
-        tenth_year: '',
-        tenth_marks: '',
-        tenth_stream: '',
-
-        twelfth_board: '',
-        twelfth_year: '',
-        twelfth_marks: '',
-        twelfth_stream: '',
-
-        graduation_university: '',
-        graduation_year: '',
-        graduation_marks: '',
-        graduation_stream: '',
-        graduation_field: '',
-
-        pg_university: '',
-        pg_year: '',
-        pg_marks: '',
-        pg_stream: '',
-        pg_field: '',
-
-        // Skills & Career
-        skill_type: '',
-        skill_trade: '',
-        skill_year: '',
-        looking_for: '',
-        experience_type: '',
-        passport: '',
-        relocation: '',
-    });
-    const stepCompletionStatus = useMemo(() => {
-        if (!student) return [false, false, false, false];
-        return [
-            // Step 0: Basic Information
-            !!(student.name && student.phone && student.email && student.whatsapp && student.age_group && student.gender && student.present_status && student.state && student.district && student.pincode && student.address),
-            // Step 1: Personal Details
-            !!(student.father_name && student.mother_name && student.category && student.blood_group && student.profile_summary),
-            // Step 2: Education
-            !!(student.highest_qualification && student.tenth_board && student.tenth_year && student.tenth_marks && student.twelfth_board && student.twelfth_year && student.twelfth_marks && student.graduation_university && student.graduation_year && student.graduation_marks && student.graduation_stream),
-            // Step 3: Skills & Career
-            !!(student.skill_type && student.skill_trade && student.skill_year && student.looking_for && student.experience_type && student.passport && student.relocation),
-        ];
-    }, [student]);
-    const [editMode, setEditMode] = useState(false);
-
-    const isProfileComplete = useMemo(() => stepCompletionStatus.every(Boolean), [stepCompletionStatus]);
-    const [photo, setPhoto] = useState(null);
-
-    const progress = useMemo(() => {
-        return ((step + 1) / steps.length) * 100;
-    }, [step]);
-
-    const updateField = (key, value) => {
-        setForm((prev) => ({
-            ...prev,
-            [key]: value,
-        }));
+// ─── Qualification-based education gating ─────────────────────
+const eduFlags = (qual) => {
+    const gradPlus = ["Graduate", "Post Graduate", "PhD"].includes(qual);
+    const ugPlus = qual === "Undergraduate" || gradPlus;
+    return {
+        tenth: !!qual && qual !== "Below 10th",
+        twelfth: qual === "12th Pass" || ugPlus,
+        grad: ugPlus,
+        gradRequired: gradPlus,
+        pg: ["Post Graduate", "PhD"].includes(qual),
     };
+};
 
+const eduRequired = (qual) => {
+    const f = eduFlags(qual);
+    const keys = ["highest_qualification"];
+    if (f.tenth) keys.push("tenth_board", "tenth_year", "tenth_marks");
+    if (f.twelfth) keys.push("twelfth_board", "twelfth_year", "twelfth_marks");
+    if (f.gradRequired)
+        keys.push("graduation_university", "graduation_year", "graduation_marks", "graduation_stream");
+    if (f.pg) keys.push("pg_university", "pg_year", "pg_marks", "pg_stream");
+    return keys;
+};
+
+// static required — step 2 dynamic hai, isliye null
+const REQUIRED = [
+    ["name", "phone", "email", "whatsapp", "age_group", "gender", "present_status", "state", "district", "pincode", "address"],
+    ["father_name", "mother_name", "category", "blood_group", "profile_summary"],
+    null, // education → eduRequired()
+    ["skill_type", "skill_trade", "skill_year", "looking_for", "experience_type", "passport", "relocation"],
+];
+
+const requiredFor = (stepIdx, qual) =>
+    stepIdx === 2 ? eduRequired(qual) : REQUIRED[stepIdx];
+
+const esc = (v) =>
+    String(v ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;");
+
+// ══════════════════════════════════════════════════════════════
+export default function ResumeBuilder({ navigation }) {
+    const { student, fetchProfile } = useAuthStore();
+
+    const [step, setStep] = useState(0);
+    const [form, setForm] = useState(EMPTY);
+    const [photo, setPhoto] = useState(null);
+    const [errors, setErrors] = useState({});
+    const [editMode, setEditMode] = useState(false);
+    const [loading, setLoading] = useState(false);
+    const [generating, setGenerating] = useState(false);
+
+    useEffect(() => { fetchProfile(); }, []);
+
+    useEffect(() => {
+        if (student) {
+            setForm((prev) => {
+                const merged = { ...prev };
+                Object.keys(EMPTY).forEach((k) => {
+                    if (student[k] != null && student[k] !== "") merged[k] = String(student[k]);
+                });
+                return merged;
+            });
+        }
+    }, [student]);
+
+    const districtOptions = useMemo(
+        () => getDistrictOptions(form.state),
+        [form.state]
+    );
+
+    // qualification-aware completion check
+    const stepStatus = useMemo(
+        () =>
+            STEPS.map((_, i) =>
+                requiredFor(i, student?.highest_qualification).every(
+                    (k) => !!student?.[k]
+                )
+            ),
+        [student]
+    );
+
+    const isComplete = useMemo(() => stepStatus.every(Boolean), [stepStatus]);
+
+    const set = useCallback((key, value) => {
+        setForm((f) => {
+            if (key === "state") return { ...f, state: value, district: "" };
+            return { ...f, [key]: value };
+        });
+        // qualification badla → purane edu errors stale, sab clear
+        if (key === "highest_qualification") setErrors({});
+        else setErrors((e) => (e[key] ? { ...e, [key]: null } : e));
+    }, []);
+
+    // ─── Photo ────────────────────────────────────────────────
     const pickImage = async () => {
-        const result = await ImagePicker.launchImageLibraryAsync({
+        const res = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.8,
+            quality: 0.7,
             allowsEditing: true,
             aspect: [1, 1],
         });
 
-        if (!result.canceled) {
-            setPhoto(result.assets[0]);
-        }
+        if (!res.canceled) setPhoto(res.assets[0]);
     };
 
-    const validateCurrentStep = () => {
+    // ─── Validation ───────────────────────────────────────────
+    const validateStep = () => {
+        const e = {};
+
+        requiredFor(step, form.highest_qualification).forEach((k) => {
+            if (!String(form[k] || "").trim()) e[k] = "Required";
+        });
+
         if (step === 0) {
-            if (!form.name || !form.phone || !form.email) {
-                Alert.alert('Required', 'Please fill Name, Phone & Email');
-                return false;
-            }
+            if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) e.email = "Invalid email";
+            if (form.phone && !/^\d{10}$/.test(form.phone)) e.phone = "10-digit phone required";
+            if (form.pincode && !/^\d{6}$/.test(form.pincode)) e.pincode = "6-digit pincode";
         }
-        // Add more validation as needed
+
+        setErrors(e);
+
+        if (Object.keys(e).length) {
+            Alert.alert("Incomplete", "Please fill all required fields on this step.");
+            return false;
+        }
+
         return true;
     };
 
-    const nextStep = () => {
-        if (validateCurrentStep() && step < steps.length - 1) {
-            setStep(step + 1);
-        }
+    const next = () => {
+        if (!validateStep()) return;
+        if (step < STEPS.length - 1) setStep(step + 1);
     };
 
-    const prevStep = () => {
-        if (step > 0) {
-            setStep(step - 1);
-        }
-    };
+    const prev = () => step > 0 && setStep(step - 1);
 
-    const generateResumePDF = async () => {
-        setGeneratingPdf(true);
-
-        try {
-            const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body {
-            font-family: 'Helvetica', Arial, sans-serif;
-            font-size: 14px;
-            line-height: 1.7;
-            color: #1f2937;
-            margin: 0;
-            padding: 40px 45px;
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-          }
-          .header {
-            text-align: center;
-            margin-bottom: 35px;
-            padding-bottom: 20px;
-            border-bottom: 3px solid #4F46E5;
-          }
-          .name {
-            font-size: 28px;
-            font-weight: bold;
-            margin: 0 0 8px 0;
-            color: #1f2937;
-          }
-          .contact-info {
-            font-size: 13.8px;
-            color: #374151;
-            margin: 0;
-          }
-          .section {
-            margin-bottom: 30px;
-          }
-          .section-title {
-            font-size: 16px;
-            font-weight: bold;
-            color: #4F46E5;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            border-bottom: 2px solid #E5E7EB;
-            padding-bottom: 8px;
-            margin-bottom: 14px;
-          }
-          .content {
-            font-size: 14px;
-          }
-          .row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-          }
-          .label {
-            font-weight: 600;
-            color: #374151;
-            min-width: 145px;
-          }
-          strong {
-            color: #1f2937;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1 class="name">${form.name || 'Your Name'}</h1>
-          <p class="contact-info">
-            ${form.email} &nbsp; | &nbsp; ${form.phone}
-            ${form.whatsapp ? ` &nbsp; | &nbsp; WhatsApp: ${form.whatsapp}` : ''}
-            <br>
-            ${form.address ? `${form.address}, ${form.district}, ${form.state} - ${form.pincode}` : ''}
-          </p>
-        </div>
-
-        <!-- Profile Summary -->
-        ${form.profile_summary ? `
-        <div class="section">
-          <div class="section-title">Profile Summary</div>
-          <div class="content">${form.profile_summary}</div>
-        </div>` : ''}
-
-        <!-- Education -->
-        <div class="section">
-          <div class="section-title">Education</div>
-          <div class="content">
-            <strong>${form.highest_qualification || ''}</strong><br><br>
-
-            ${form.graduation_university ? `
-              <strong>${form.graduation_field || 'Graduation'}</strong> — ${form.graduation_university}<br>
-              Year: ${form.graduation_year} &nbsp; | &nbsp; Marks: ${form.graduation_marks}% &nbsp; | &nbsp; ${form.graduation_stream}<br><br>` : ''}
-
-            ${form.pg_university ? `
-              <strong>${form.pg_field || 'Post Graduation'}</strong> — ${form.pg_university}<br>
-              Year: ${form.pg_year} &nbsp; | &nbsp; Marks: ${form.pg_marks}% &nbsp; | &nbsp; ${form.pg_stream}<br><br>` : ''}
-
-            ${form.twelfth_board ? `
-              <strong>12th (${form.twelfth_stream || ''})</strong> — ${form.twelfth_board}<br>
-              Year: ${form.twelfth_year} &nbsp; | &nbsp; Marks: ${form.twelfth_marks}%<br><br>` : ''}
-
-            ${form.tenth_board ? `
-              <strong>10th</strong> — ${form.tenth_board}<br>
-              Year: ${form.tenth_year} &nbsp; | &nbsp; Marks: ${form.tenth_marks}%<br>` : ''}
-          </div>
-        </div>
-
-        <!-- Skills & Career -->
-        <div class="section">
-          <div class="section-title">Skills & Career</div>
-          <div class="content">
-            <div class="row"><span class="label">Skill / Trade:</span> <span>${form.skill_trade}</span></div>
-            <div class="row"><span class="label">Experience:</span> <span>${form.skill_year} Years</span></div>
-            <div class="row"><span class="label">Looking For:</span> <span>${form.looking_for}</span></div>
-            <div class="row"><span class="label">Experience Type:</span> <span>${form.experience_type}</span></div>
-            <div class="row"><span class="label">Passport:</span> <span>${form.passport}</span></div>
-            <div class="row"><span class="label">Willing to Relocate:</span> <span>${form.relocation}</span></div>
-          </div>
-        </div>
-
-        <!-- Personal Details -->
-        <div class="section">
-          <div class="section-title">Personal Details</div>
-          <div class="content">
-            <div class="row"><span class="label">Father's Name:</span> <span>${form.father_name}</span></div>
-            <div class="row"><span class="label">Mother's Name:</span> <span>${form.mother_name}</span></div>
-            <div class="row"><span class="label">Gender:</span> <span>${form.gender}</span></div>
-            <div class="row"><span class="label">Age Group:</span> <span>${form.age_group}</span></div>
-            <div class="row"><span class="label">Blood Group:</span> <span>${form.blood_group}</span></div>
-            <div class="row"><span class="label">Category:</span> <span>${form.category}</span></div>
-          </div>
-        </div>
-      </body>
-      </html>`;
-
-            // Generate PDF
-            const { uri } = await Print.printToFileAsync({
-                html: htmlContent,
-                width: 612,   // A4 Width
-                height: 792,  // A4 Height
-            });
-
-            // Save to permanent location
-            const fileName = `Resume_${(form.name || 'Candidate').replace(/\s+/g, '_')}_${Date.now()}.pdf`;
-            const destinationUri = `${FileSystem.cacheDirectory}${fileName}`;
-
-            await FileSystem.copyAsync({
-                from: uri,
-                to: destinationUri,
-            });
-
-            if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(destinationUri, {
-                    mimeType: 'application/pdf',
-                    dialogTitle: `${form.name}'s Resume`,
-                    UTI: 'com.adobe.pdf',           // iOS
-                });
-
-                Alert.alert('✅ Success', 'Resume generated successfully!\nYou can now save or share it.');
-            } else {
-                Alert.alert('PDF Generated', 'File saved successfully');
-            }
-
-            Alert.alert('✅ Success', 'Resume opened successfully in PDF viewer');
-
-        } catch (error) {
-            console.error('PDF Generation Error:', error);
-            Alert.alert('Error', 'Failed to generate PDF. Please try again.');
-        } finally {
-            setGeneratingPdf(false);
-        }
-    };
-
+    // ─── Save ─────────────────────────────────────────────────
     const submitProfile = async () => {
+        if (!validateStep()) return;
+
+        setLoading(true);
         try {
-            setLoading(true);
+            const fd = new FormData();
 
-            const formData = new FormData();
+            const f = eduFlags(form.highest_qualification);
 
-            Object.keys(form).forEach((key) => {
-                if (form[key]) {
-                    formData.append(key, form[key]);
-                }
+            Object.entries(form).forEach(([k, v]) => {
+                // hidden edu sections ki values server pe mat bhejo
+                if (!f.tenth && k.startsWith("tenth_")) return;
+                if (!f.twelfth && k.startsWith("twelfth_")) return;
+                if (!f.grad && k.startsWith("graduation_")) return;
+                if (!f.pg && k.startsWith("pg_")) return;
+                if (v !== "" && v != null) fd.append(k, String(v));
             });
 
             if (photo) {
-                formData.append('photo', {
+                fd.append("photo", {
                     uri: photo.uri,
-                    name: 'profile.jpg',
-                    type: 'image/jpeg',
+                    name: "profile.jpg",
+                    type: "image/jpeg",
                 });
             }
 
-            const res = await API.post(
-                '/auth/update-student-profile',
-                formData,
-                {
-                    headers: {
-                        'Content-Type': 'multipart/form-data',
-                    },
-                }
-            );
+            const res = await API.post("/auth/update-student-profile", fd, {
+                headers: { "Content-Type": "multipart/form-data" },
+            });
 
             if (res.data?.success) {
-                Alert.alert('Success', 'Your resume has been saved successfully!', [
-                    { text: 'Great!', onPress: () => { navigation.goBack() } },
+                await fetchProfile();
+                setEditMode(false);
+
+                Alert.alert("Saved", "Your resume details have been saved.", [
+                    { text: "OK" },
                 ]);
             } else {
-                Alert.alert('Error', res.data?.message || 'Something went wrong');
+                Alert.alert("Error", res.data?.message || "Something went wrong");
             }
-        } catch (e) {
-            console.error(e);
-            Alert.alert('Error', 'Failed to save resume. Please try again.');
+        } catch (err) {
+            console.error("[submitProfile]", err?.response?.data || err?.message);
+            Alert.alert("Error", "Failed to save. Please try again.");
         } finally {
             setLoading(false);
         }
     };
-    useEffect(() => {
-        if (student) {
-            setForm((prev) => ({
-                ...prev,
-                ...student,
-            }));
-        }
-    }, [student]);
-    useEffect(() => {
-        fetchProfile()
-    }, [])
 
-    const renderInput = (label, fieldKey, placeholder = '', options = {}) => (
-        <View style={styles.inputWrap}>
-            <Text style={styles.label}>{label}</Text>
-            <TextInput
-                style={[
-                    styles.input,
-                    options.multiline && styles.multilineInput,
-                ]}
-                placeholder={placeholder || `Enter ${label.toLowerCase()}`}
-                placeholderTextColor="#9CA3AF"
-                value={form[fieldKey]}
-                onChangeText={(v) => updateField(fieldKey, v)}
-                keyboardType={options.keyboardType || 'default'}
-                multiline={options.multiline}
-                numberOfLines={options.multiline ? 4 : 1}
-                {...options}
-            />
-        </View>
-    );
-    // Add this helper above renderStepContent:
-    const renderStepWarning = (stepIndex) => {
-        if (editMode && !stepCompletionStatus[stepIndex]) {
-            return (
-                <View style={{ backgroundColor: '#FEF2F2', borderRadius: 14, padding: 14, marginBottom: 20, flexDirection: 'row', gap: 10, alignItems: 'center', borderWidth: 1.5, borderColor: '#FECACA' }}>
-                    <Ionicons name="alert-circle" size={20} color="#DC2626" />
-                    <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 13, flex: 1 }}>
-                        This step is incomplete. Please fill all required fields.
-                    </Text>
-                </View>
-            );
-        }
-        return null;
+    // ─── PDF ──────────────────────────────────────────────────
+    const buildHtml = () => {
+        const f = form;
+        const flags = eduFlags(f.highest_qualification);
+
+        const row = (label, val) =>
+            val
+                ? `<tr><td class="lbl">${esc(label)}</td><td class="val">${esc(val)}</td></tr>`
+                : "";
+
+        const eduBlock = (title, sub, year, marks, stream) =>
+            title
+                ? `<div class="edu">
+             <div class="edu-top">
+               <span class="edu-title">${esc(title)}</span>
+               <span class="edu-year">${esc(year || "")}</span>
+             </div>
+             <div class="edu-sub">${esc(sub || "")}</div>
+             <div class="edu-meta">
+               ${marks ? `<span class="pill">${esc(marks)}%</span>` : ""}
+               ${stream ? `<span class="pill">${esc(stream)}</span>` : ""}
+             </div>
+           </div>`
+                : "";
+
+        const location = [f.address, f.district, f.state].filter(Boolean).join(", ");
+
+        // sirf applicable sections PDF me
+        const eduHtml = [
+            flags.pg && f.pg_university
+                ? eduBlock(f.pg_field || "Post Graduation", f.pg_university, f.pg_year, f.pg_marks, f.pg_stream)
+                : "",
+            flags.grad && f.graduation_university
+                ? eduBlock(f.graduation_field || "Graduation", f.graduation_university, f.graduation_year, f.graduation_marks, f.graduation_stream)
+                : "",
+            flags.twelfth && f.twelfth_board
+                ? eduBlock("Class 12th", f.twelfth_board, f.twelfth_year, f.twelfth_marks, f.twelfth_stream)
+                : "",
+            flags.tenth && f.tenth_board
+                ? eduBlock("Class 10th", f.tenth_board, f.tenth_year, f.tenth_marks, f.tenth_stream)
+                : "",
+        ].join("");
+
+        return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    color: #1f2937;
+    margin: 0;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1.6;
+  }
+
+  .brandbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 18px 34px;
+    border-bottom: 4px solid #E53935;
+  }
+  .brandbar img { height: 46px; }
+  .brand-right {
+    text-align: right;
+    font-size: 10px;
+    color: #6b7280;
+    line-height: 1.5;
+  }
+  .brand-right b { color: #E53935; font-size: 11px; letter-spacing: .5px; }
+
+  .hero {
+    padding: 24px 34px 18px;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+  .avatar {
+    width: 84px; height: 84px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 3px solid #E53935;
+    flex-shrink: 0;
+  }
+  .hero h1 {
+    margin: 0 0 4px;
+    font-size: 24px;
+    letter-spacing: -.3px;
+    color: #0f172a;
+  }
+  .hero .role {
+    font-size: 12.5px;
+    color: #E53935;
+    font-weight: bold;
+    margin-bottom: 6px;
+  }
+  .hero .contact { font-size: 11px; color: #4b5563; }
+  .hero .contact span { margin-right: 12px; }
+
+  .wrap { padding: 0 34px 30px; }
+
+  .sec { margin-top: 20px; page-break-inside: avoid; }
+  .sec-title {
+    font-size: 11px;
+    font-weight: bold;
+    color: #E53935;
+    text-transform: uppercase;
+    letter-spacing: 1.4px;
+    padding-bottom: 5px;
+    border-bottom: 1.5px solid #f1d3d3;
+    margin-bottom: 10px;
+  }
+
+  .summary { font-size: 12px; color: #374151; text-align: justify; }
+
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 5px 0; vertical-align: top; font-size: 11.5px; }
+  .lbl { color: #6b7280; width: 42%; font-weight: 600; }
+  .val { color: #111827; font-weight: bold; }
+
+  .grid { display: flex; gap: 26px; }
+  .grid > div { flex: 1; }
+
+  .edu {
+    padding: 9px 0;
+    border-bottom: 1px dashed #e5e7eb;
+  }
+  .edu:last-child { border-bottom: 0; }
+  .edu-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .edu-title { font-weight: bold; font-size: 12px; color: #111827; }
+  .edu-year { font-size: 10.5px; color: #6b7280; }
+  .edu-sub { font-size: 11px; color: #4b5563; margin-top: 1px; }
+  .edu-meta { margin-top: 5px; }
+  .pill {
+    display: inline-block;
+    background: #FFEBEE;
+    color: #B71C1C;
+    border: 1px solid #f3c9cc;
+    border-radius: 20px;
+    padding: 2px 9px;
+    font-size: 9.5px;
+    font-weight: bold;
+    margin-right: 5px;
+  }
+
+  .footer {
+    margin-top: 26px;
+    padding-top: 12px;
+    border-top: 1.5px solid #f1f1f4;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 9.5px;
+    color: #9ca3af;
+  }
+  .footer b { color: #E53935; }
+</style>
+</head>
+<body>
+
+  <div class="brandbar">
+    <img src="${EFOS_LOGO_BASE64}" alt="EFOS" />
+    <div class="brand-right">
+      <b>${esc(EFOS_TAGLINE.toUpperCase())}</b><br />
+      Verified Candidate Profile · ${esc(EFOS_SITE)}
+    </div>
+  </div>
+
+  <div class="hero">
+    ${photo?.uri ? `<img class="avatar" src="${photo.uri}" />` : ""}
+    <div>
+      <h1>${esc(f.name || "Candidate Name")}</h1>
+      <div class="role">${esc(f.skill_trade || f.highest_qualification || "")}</div>
+      <div class="contact">
+        ${f.phone ? `<span>&#9742; ${esc(f.phone)}</span>` : ""}
+        ${f.email ? `<span>&#9993; ${esc(f.email)}</span>` : ""}
+        ${f.whatsapp ? `<span>WhatsApp: ${esc(f.whatsapp)}</span>` : ""}
+      </div>
+      ${location ? `<div class="contact" style="margin-top:3px">&#9906; ${esc(location)}${f.pincode ? " - " + esc(f.pincode) : ""}</div>` : ""}
+    </div>
+  </div>
+
+  <div class="wrap">
+
+    ${f.profile_summary ? `
+    <div class="sec">
+      <div class="sec-title">Profile Summary</div>
+      <div class="summary">${esc(f.profile_summary)}</div>
+    </div>` : ""}
+
+    ${eduHtml ? `
+    <div class="sec">
+      <div class="sec-title">Education</div>
+      ${eduHtml}
+    </div>` : ""}
+
+    <div class="sec">
+      <div class="sec-title">Skills &amp; Career</div>
+      <div class="grid">
+        <div>
+          <table>
+            ${row("Skill Type", f.skill_type)}
+            ${row("Skill / Trade", f.skill_trade)}
+            ${row("Experience", f.skill_year ? `${f.skill_year} Years` : "")}
+          </table>
+        </div>
+        <div>
+          <table>
+            ${row("Experience Type", f.experience_type)}
+            ${row("Looking For", f.looking_for)}
+            ${row("Present Status", f.present_status)}
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="sec-title">Personal Details</div>
+      <div class="grid">
+        <div>
+          <table>
+            ${row("Father's Name", f.father_name)}
+            ${row("Mother's Name", f.mother_name)}
+            ${row("Gender", f.gender)}
+            ${row("Age Group", f.age_group?.replace("_", " - "))}
+          </table>
+        </div>
+        <div>
+          <table>
+            ${row("Category", f.category)}
+            ${row("Blood Group", f.blood_group)}
+            ${row("Passport", f.passport)}
+            ${row("Relocation", f.relocation)}
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>Generated via <b>EFOS</b> — ${esc(EFOS_TAGLINE)}</span>
+      <span>${new Date().toLocaleDateString("en-IN")}</span>
+    </div>
+
+  </div>
+</body>
+</html>`;
     };
-    const renderStepContent = () => {
+
+    const generatePDF = async () => {
+        setGenerating(true);
+
+        try {
+            const { uri } = await Print.printToFileAsync({
+                html: buildHtml(),
+                base64: false,
+            });
+
+            const fileName = `EFOS_Resume_${(form.name || "Candidate").replace(/\s+/g, "_")}.pdf`;
+            const dest = `${FileSystem.cacheDirectory}${fileName}`;
+
+            await FileSystem.copyAsync({ from: uri, to: dest });
+
+            if (await Sharing.isAvailableAsync()) {
+                await Sharing.shareAsync(dest, {
+                    mimeType: "application/pdf",
+                    dialogTitle: `${form.name || "Candidate"} — Resume`,
+                    UTI: "com.adobe.pdf",
+                });
+            } else {
+                Alert.alert("Saved", "Resume PDF generated successfully.");
+            }
+        } catch (err) {
+            console.error("[generatePDF]", err);
+            Alert.alert("Error", "Failed to generate PDF. Please try again.");
+        } finally {
+            setGenerating(false);
+        }
+    };
+
+    // ─── Step content ─────────────────────────────────────────
+    const renderStep = () => {
         switch (step) {
-            case 0: // Basic Information
+            case 0:
                 return (
                     <>
-                        <UploadPhoto photo={photo} onPress={pickImage} />
+                        <PhotoPicker
+                            photo={photo}
+                            existing={student?.photo}
+                            onPress={pickImage}
+                        />
 
-                        {renderInput('Full Name *', 'name')}
-                        {renderInput('Phone Number *', 'phone', '', { keyboardType: 'phone-pad' })}
-                        {renderInput('Email Address *', 'email', '', { keyboardType: 'email-address' })}
-                        {renderInput('WhatsApp Number', 'whatsapp', '', { keyboardType: 'phone-pad' })}
-                        {renderInput('Age Group', 'age_group')}
-                        {renderInput('Gender', 'gender')}
-                        {renderInput('Present Status', 'present_status')}
-                        {renderInput('State', 'state')}
-                        {renderInput('District', 'district')}
-                        {renderInput('Pincode', 'pincode', '', { keyboardType: 'numeric' })}
-                        {renderInput('Full Address', 'address', '', { multiline: true })}
+                        <Field label="Full Name" required icon="person-outline" autoCapitalize="words"
+                            placeholder="Enter full name"
+                            value={form.name} onChangeText={(v) => set("name", v)} error={errors.name} />
+
+                        <Row>
+                            <Col>
+                                <Field label="Phone" required icon="call-outline" keyboardType="phone-pad" maxLength={10}
+                                    placeholder="10-digit"
+                                    value={form.phone} onChangeText={(v) => set("phone", v.replace(/\D/g, ""))} error={errors.phone} />
+                            </Col>
+                            <Col>
+                                <Field label="WhatsApp" required icon="logo-whatsapp" keyboardType="phone-pad" maxLength={10}
+                                    placeholder="10-digit"
+                                    value={form.whatsapp} onChangeText={(v) => set("whatsapp", v.replace(/\D/g, ""))} error={errors.whatsapp} />
+                            </Col>
+                        </Row>
+
+                        <Field label="Email Address" required icon="mail-outline" keyboardType="email-address"
+                            placeholder="you@example.com"
+                            value={form.email} onChangeText={(v) => set("email", v)} error={errors.email} />
+
+                        <Row>
+                            <Col>
+                                <SelectField label="Age Group" required icon="calendar-outline"
+                                    value={form.age_group} onValueChange={(v) => set("age_group", v)}
+                                    options={AGE_GROUP_OPTIONS} error={errors.age_group} />
+                            </Col>
+                            <Col>
+                                <SelectField label="Gender" required icon="male-female-outline"
+                                    value={form.gender} onValueChange={(v) => set("gender", v)}
+                                    options={GENDER_OPTIONS} error={errors.gender} />
+                            </Col>
+                        </Row>
+
+                        <SelectField label="Present Status" required icon="pulse-outline"
+                            value={form.present_status} onValueChange={(v) => set("present_status", v)}
+                            options={PRESENT_STATUS_OPTIONS} error={errors.present_status} />
+
+                        <Row>
+                            <Col>
+                                <SelectField label="State" required icon="map-outline" searchable
+                                    placeholder="Select State"
+                                    value={form.state} onValueChange={(v) => set("state", v)}
+                                    options={STATE_OPTIONS} error={errors.state} />
+                            </Col>
+                            <Col>
+                                <SelectField label="District" required icon="location-outline" searchable
+                                    placeholder={form.state ? "Select District" : "Pick state first"}
+                                    value={form.district} onValueChange={(v) => set("district", v)}
+                                    options={districtOptions} disabled={!form.state} error={errors.district} />
+                            </Col>
+                        </Row>
+
+                        <Field label="Pincode" required icon="navigate-outline" keyboardType="numeric" maxLength={6}
+                            placeholder="6-digit pincode"
+                            value={form.pincode} onChangeText={(v) => set("pincode", v.replace(/\D/g, ""))} error={errors.pincode} />
+
+                        <Field label="Full Address" required icon="home-outline" multiline
+                            placeholder="House no, street, locality"
+                            value={form.address} onChangeText={(v) => set("address", v)} error={errors.address} />
                     </>
                 );
 
-            case 1: // Personal Details
+            case 1:
                 return (
                     <>
-                        {renderInput("Father's Name", 'father_name')}
-                        {renderInput("Mother's Name", 'mother_name')}
-                        {renderInput('Category', 'category')}
-                        {renderInput('Blood Group', 'blood_group')}
-                        {renderInput('Profile Summary', 'profile_summary', 'Write a short professional summary...', {
-                            multiline: true,
-                        })}
+                        <Row>
+                            <Col>
+                                <Field label="Father's Name" required icon="man-outline" autoCapitalize="words"
+                                    placeholder="Enter name"
+                                    value={form.father_name} onChangeText={(v) => set("father_name", v)} error={errors.father_name} />
+                            </Col>
+                            <Col>
+                                <Field label="Mother's Name" required icon="woman-outline" autoCapitalize="words"
+                                    placeholder="Enter name"
+                                    value={form.mother_name} onChangeText={(v) => set("mother_name", v)} error={errors.mother_name} />
+                            </Col>
+                        </Row>
+
+                        <Row>
+                            <Col>
+                                <SelectField label="Category" required icon="people-outline"
+                                    value={form.category} onValueChange={(v) => set("category", v)}
+                                    options={CATEGORY_OPTIONS} error={errors.category} />
+                            </Col>
+                            <Col>
+                                <SelectField label="Blood Group" required icon="water-outline"
+                                    value={form.blood_group} onValueChange={(v) => set("blood_group", v)}
+                                    options={BLOOD_GROUP_OPTIONS} error={errors.blood_group} />
+                            </Col>
+                        </Row>
+
+                        <Field label="Profile Summary" required icon="document-text-outline" multiline
+                            placeholder="2-3 lines about yourself, your strengths and goals..."
+                            value={form.profile_summary} onChangeText={(v) => set("profile_summary", v)}
+                            error={errors.profile_summary} />
                     </>
                 );
 
-            case 2: // Education Details
+            case 2: {
+                const f = eduFlags(form.highest_qualification);
                 return (
                     <>
-                        {renderInput('Highest Qualification', 'highest_qualification')}
+                        <SelectField label="Highest Qualification" required icon="ribbon-outline"
+                            value={form.highest_qualification} onValueChange={(v) => set("highest_qualification", v)}
+                            options={QUALIFICATION_OPTIONS} error={errors.highest_qualification} />
 
-                        <Text style={styles.sectionTitle}>10th Details</Text>
-                        {renderInput('Board', 'tenth_board')}
-                        {renderInput('Year of Passing', 'tenth_year', '', { keyboardType: 'numeric' })}
-                        {renderInput('Marks (%)', 'tenth_marks', '', { keyboardType: 'numeric' })}
-                        {renderInput('Stream', 'tenth_stream')}
+                        {!form.highest_qualification && (
+                            <Text style={{ fontSize: 12, color: "#9CA3AF", textAlign: "center", marginTop: 8 }}>
+                                Select qualification to see relevant sections
+                            </Text>
+                        )}
 
-                        <Text style={styles.sectionTitle}>12th Details</Text>
-                        {renderInput('Board', 'twelfth_board')}
-                        {renderInput('Year of Passing', 'twelfth_year', '', { keyboardType: 'numeric' })}
-                        {renderInput('Marks (%)', 'twelfth_marks', '', { keyboardType: 'numeric' })}
-                        {renderInput('Stream', 'twelfth_stream')}
+                        {f.tenth && (
+                            <>
+                                <Section title="CLASS 10TH" />
+                                <Row>
+                                    <Col>
+                                        <SelectField label="Board" required icon="library-outline" searchable
+                                            value={form.tenth_board} onValueChange={(v) => set("tenth_board", v)}
+                                            options={BOARD_OPTIONS} error={errors.tenth_board} />
+                                    </Col>
+                                    <Col>
+                                        <SelectField label="Year" required icon="calendar-outline" searchable
+                                            value={form.tenth_year} onValueChange={(v) => set("tenth_year", v)}
+                                            options={YEAR_OPTIONS} error={errors.tenth_year} />
+                                    </Col>
+                                </Row>
+                                <Field label="Marks (%)" required icon="stats-chart-outline" keyboardType="numeric" maxLength={5}
+                                    placeholder="e.g. 78"
+                                    value={form.tenth_marks} onChangeText={(v) => set("tenth_marks", v)} error={errors.tenth_marks} />
+                            </>
+                        )}
 
-                        <Text style={styles.sectionTitle}>Graduation</Text>
-                        {renderInput('University / College', 'graduation_university')}
-                        {renderInput('Year', 'graduation_year', '', { keyboardType: 'numeric' })}
-                        {renderInput('Marks (%) / CGPA', 'graduation_marks')}
-                        {renderInput('Stream', 'graduation_stream')}
-                        {renderInput('Field / Specialization', 'graduation_field')}
+                        {f.twelfth && (
+                            <>
+                                <Section title="CLASS 12TH" />
+                                <Row>
+                                    <Col>
+                                        <SelectField label="Board" required icon="library-outline" searchable
+                                            value={form.twelfth_board} onValueChange={(v) => set("twelfth_board", v)}
+                                            options={BOARD_OPTIONS} error={errors.twelfth_board} />
+                                    </Col>
+                                    <Col>
+                                        <SelectField label="Year" required icon="calendar-outline" searchable
+                                            value={form.twelfth_year} onValueChange={(v) => set("twelfth_year", v)}
+                                            options={YEAR_OPTIONS} error={errors.twelfth_year} />
+                                    </Col>
+                                </Row>
+                                <Row>
+                                    <Col>
+                                        <Field label="Marks (%)" required icon="stats-chart-outline" keyboardType="numeric" maxLength={5}
+                                            placeholder="e.g. 82"
+                                            value={form.twelfth_marks} onChangeText={(v) => set("twelfth_marks", v)} error={errors.twelfth_marks} />
+                                    </Col>
+                                    <Col>
+                                        <SelectField label="Stream" icon="git-branch-outline"
+                                            value={form.twelfth_stream} onValueChange={(v) => set("twelfth_stream", v)}
+                                            options={SCHOOL_STREAM_OPTIONS} />
+                                    </Col>
+                                </Row>
+                            </>
+                        )}
 
-                        <Text style={styles.sectionTitle}>Post Graduation (if any)</Text>
-                        {renderInput('University / College', 'pg_university')}
-                        {renderInput('Year', 'pg_year', '', { keyboardType: 'numeric' })}
-                        {renderInput('Marks (%) / CGPA', 'pg_marks')}
-                        {renderInput('Stream', 'pg_stream')}
-                        {renderInput('Field / Specialization', 'pg_field')}
+                        {f.grad && (
+                            <>
+                                <Section title={f.gradRequired ? "GRADUATION" : "GRADUATION (PURSUING — OPTIONAL)"} />
+                                <Field label="University / College" required={f.gradRequired} icon="business-outline" autoCapitalize="words"
+                                    placeholder="Enter institute name"
+                                    value={form.graduation_university} onChangeText={(v) => set("graduation_university", v)}
+                                    error={errors.graduation_university} />
+                                <Row>
+                                    <Col>
+                                        <SelectField label="Year" required={f.gradRequired} icon="calendar-outline" searchable
+                                            value={form.graduation_year} onValueChange={(v) => set("graduation_year", v)}
+                                            options={YEAR_OPTIONS} error={errors.graduation_year} />
+                                    </Col>
+                                    <Col>
+                                        <Field label="Marks / CGPA" required={f.gradRequired} icon="stats-chart-outline"
+                                            placeholder="e.g. 7.8"
+                                            value={form.graduation_marks} onChangeText={(v) => set("graduation_marks", v)}
+                                            error={errors.graduation_marks} />
+                                    </Col>
+                                </Row>
+                                <Row>
+                                    <Col>
+                                        <SelectField label="Stream" required={f.gradRequired} icon="git-branch-outline" searchable
+                                            value={form.graduation_stream} onValueChange={(v) => set("graduation_stream", v)}
+                                            options={GRAD_STREAM_OPTIONS} error={errors.graduation_stream} />
+                                    </Col>
+                                    <Col>
+                                        <Field label="Specialization" icon="bookmark-outline"
+                                            placeholder="e.g. CSE"
+                                            value={form.graduation_field} onChangeText={(v) => set("graduation_field", v)} />
+                                    </Col>
+                                </Row>
+                            </>
+                        )}
+
+                        {f.pg && (
+                            <>
+                                <Section title="POST GRADUATION" />
+                                <Field label="University / College" required icon="business-outline" autoCapitalize="words"
+                                    placeholder="Enter institute name"
+                                    value={form.pg_university} onChangeText={(v) => set("pg_university", v)}
+                                    error={errors.pg_university} />
+                                <Row>
+                                    <Col>
+                                        <SelectField label="Year" required icon="calendar-outline" searchable
+                                            value={form.pg_year} onValueChange={(v) => set("pg_year", v)}
+                                            options={YEAR_OPTIONS} error={errors.pg_year} />
+                                    </Col>
+                                    <Col>
+                                        <Field label="Marks / CGPA" required icon="stats-chart-outline"
+                                            placeholder="e.g. 8.1"
+                                            value={form.pg_marks} onChangeText={(v) => set("pg_marks", v)}
+                                            error={errors.pg_marks} />
+                                    </Col>
+                                </Row>
+                                <Row>
+                                    <Col>
+                                        <SelectField label="Stream" required icon="git-branch-outline" searchable
+                                            value={form.pg_stream} onValueChange={(v) => set("pg_stream", v)}
+                                            options={PG_STREAM_OPTIONS} error={errors.pg_stream} />
+                                    </Col>
+                                    <Col>
+                                        <Field label="Specialization" icon="bookmark-outline"
+                                            placeholder="e.g. Finance"
+                                            value={form.pg_field} onChangeText={(v) => set("pg_field", v)} />
+                                    </Col>
+                                </Row>
+                            </>
+                        )}
                     </>
                 );
+            }
 
-            case 3: // Skills & Career
+            case 3:
                 return (
                     <>
-                        {renderInput('Skill Type', 'skill_type')}
-                        {renderInput('Skill / Trade', 'skill_trade')}
-                        {renderInput('Years of Experience', 'skill_year', '', { keyboardType: 'numeric' })}
-                        {renderInput('Looking For', 'looking_for')}
-                        {renderInput('Experience Type', 'experience_type')}
-                        {renderInput('Passport Status', 'passport')}
-                        {renderInput('Willing to Relocate?', 'relocation')}
+                        <Row>
+                            <Col>
+                                <SelectField label="Skill Type" required icon="construct-outline"
+                                    value={form.skill_type} onValueChange={(v) => set("skill_type", v)}
+                                    options={SKILL_TYPE_OPTIONS} error={errors.skill_type} />
+                            </Col>
+                            <Col>
+                                <SelectField label="Experience" required icon="hourglass-outline"
+                                    value={form.skill_year} onValueChange={(v) => set("skill_year", v)}
+                                    options={EXPERIENCE_YEAR_OPTIONS} error={errors.skill_year} />
+                            </Col>
+                        </Row>
+
+                        <SelectField label="Skill / Trade" required icon="hammer-outline" searchable
+                            value={form.skill_trade} onValueChange={(v) => set("skill_trade", v)}
+                            options={SKILL_TRADE_OPTIONS} error={errors.skill_trade} />
+
+                        <Row>
+                            <Col>
+                                <SelectField label="Experience Type" required icon="time-outline"
+                                    value={form.experience_type} onValueChange={(v) => set("experience_type", v)}
+                                    options={EXPERIENCE_TYPE_OPTIONS} error={errors.experience_type} />
+                            </Col>
+                            <Col>
+                                <SelectField label="Looking For" required icon="compass-outline"
+                                    value={form.looking_for} onValueChange={(v) => set("looking_for", v)}
+                                    options={LOOKING_FOR_OPTIONS} error={errors.looking_for} />
+                            </Col>
+                        </Row>
+
+                        <Row>
+                            <Col>
+                                <SelectField label="Passport" required icon="airplane-outline"
+                                    value={form.passport} onValueChange={(v) => set("passport", v)}
+                                    options={PASSPORT_OPTIONS} error={errors.passport} />
+                            </Col>
+                            <Col>
+                                <SelectField label="Relocation" required icon="swap-horizontal-outline"
+                                    value={form.relocation} onValueChange={(v) => set("relocation", v)}
+                                    options={RELOCATION_OPTIONS} error={errors.relocation} />
+                            </Col>
+                        </Row>
                     </>
                 );
 
@@ -596,297 +854,377 @@ export default function ResumeBuilder({ navigation }) {
         }
     };
 
-
-    if (isProfileComplete && !editMode) {
+    // ─── Overview (profile already complete) ──────────────────
+    if (isComplete && !editMode) {
         return (
-            <AlreadyFilledScreen
+            <Overview
                 student={student}
-                onGeneratePDF={generateResumePDF}
-                onEdit={() => setEditMode(true)}
-                generatingPdf={generatingPdf}
-                isProfileComplete={isProfileComplete}
-                stepCompletionStatus={stepCompletionStatus}
+                stepStatus={stepStatus}
+                generating={generating}
+                onEdit={() => { setEditMode(true); setStep(0); }}
+                onDownload={generatePDF}
+                onBack={() => navigation.goBack()}
             />
         );
     }
+
+    const progress = ((step + 1) / STEPS.length) * 100;
+    const isLast = step === STEPS.length - 1;
+
     return (
-        <SafeAreaView style={styles.safeArea}>
+        <SafeAreaView style={s.root} edges={["top"]}>
+            <StatusBar barStyle={"dark-content"} />
+
+            <LinearGradient colors={[C.primary, C.primaryDark]} style={s.header}>
+                <View style={s.headRow}>
+                    <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={10}>
+                        <Ionicons name="arrow-back" size={22} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={s.headTitle}>Resume Builder</Text>
+                    <View style={{ width: 22 }} />
+                </View>
+
+                <View style={s.progressTrack}>
+                    <View style={[s.progressFill, { width: `${progress}%` }]} />
+                </View>
+
+                <View style={s.stepRow}>
+                    <Ionicons name={STEPS[step].icon} size={13} color="rgba(255,255,255,0.9)" />
+                    <Text style={s.stepTxt}>
+                        {STEPS[step].title} · Step {step + 1}/{STEPS.length}
+                    </Text>
+                </View>
+            </LinearGradient>
+
             <KeyboardAvoidingView
-                behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                style={styles.container}
+                style={{ flex: 1 }}
+                behavior={Platform.OS === "ios" ? "padding" : "height"}
+                keyboardVerticalOffset={Platform.OS === "ios" ? 0 : StatusBar.currentHeight || 0}
             >
-                <LinearGradient
-                    colors={['#d92828', '#e54646', '#f45555']}
-                    style={styles.header}
-                >
-                    <View style={styles.headerContent}>
-                        <Text style={styles.headerTitle}>Resume Builder</Text>
-                        <Text style={styles.headerSubtitle}>
-                            Create a professional profile in minutes
-                        </Text>
-
-                        <View style={styles.progressContainer}>
-                            <View style={styles.progressBg}>
-                                <View
-                                    style={[
-                                        styles.progressFill,
-                                        { width: `${progress}%` },
-                                    ]}
-                                />
-                            </View>
-                            <Text style={styles.stepText}>
-                                {steps[step]} • Step {step + 1} of {steps.length}
-                            </Text>
-                        </View>
-                    </View>
-                </LinearGradient>
-
                 <ScrollView
-                    contentContainerStyle={styles.scrollContent}
+                    contentContainerStyle={s.scroll}
                     showsVerticalScrollIndicator={false}
                     keyboardShouldPersistTaps="handled"
                 >
-                    {renderStepContent()}
-
-                    <View style={styles.footerSpacer} />
+                    {renderStep()}
+                    <View style={{ height: 20 }} />
                 </ScrollView>
 
-                {/* Sticky Bottom Navigation */}
-                <View style={styles.bottomNav}>
+                <View style={s.bottomBar}>
                     <TouchableOpacity
-                        style={[styles.navButton, step === 0 && styles.disabledBtn]}
-                        onPress={prevStep}
+                        style={[s.backBtn, step === 0 && { opacity: 0.4 }]}
+                        onPress={prev}
                         disabled={step === 0}
                     >
-                        <Ionicons name="chevron-back" size={20} color={step === 0 ? '#9CA3AF' : '#4F46E5'} />
-                        <Text style={[styles.navButtonText, step === 0 && styles.disabledText]}>Previous</Text>
+                        <Ionicons name="chevron-back" size={18} color={C.text} />
+                        <Text style={s.backTxt}>Back</Text>
                     </TouchableOpacity>
 
-                    {step < steps.length - 1 ? (
-                        <TouchableOpacity style={styles.nextButton} onPress={nextStep}>
-                            <LinearGradient colors={['#e12e4c', '#e12e4c']} style={styles.nextGradient}>
-                                <Text style={styles.nextButtonText}>Continue</Text>
-                                <Ionicons name="arrow-forward" size={20} color="#fff" />
-                            </LinearGradient>
-                        </TouchableOpacity>
-                    ) : (
-                        <View style={{ flexDirection: 'row', gap: 12, flex: 1 }}>
-                            <TouchableOpacity style={styles.nextButton} onPress={generateResumePDF} disabled={generatingPdf}>
-                                <LinearGradient colors={['#e12e4c', '#e12e4c']} style={styles.nextGradient}>
-                                    {generatingPdf ? (
-                                        <ActivityIndicator color="#fff" />
-                                    ) : (
-                                        <>
-                                            <Text style={styles.nextButtonText}>Preview PDF</Text>
-
-                                        </>
-                                    )}
-                                </LinearGradient>
-                            </TouchableOpacity>
-
-                            <TouchableOpacity style={styles.nextButton} onPress={submitProfile} disabled={loading}>
-                                <LinearGradient colors={['#10B981', '#059669']} style={styles.nextGradient}>
-                                    {loading ? <ActivityIndicator color="#fff" /> : <Text style={styles.nextButtonText}>Save Profile</Text>}
-                                </LinearGradient>
-                            </TouchableOpacity>
-                        </View>
-                    )}
+                    <TouchableOpacity
+                        style={s.mainBtn}
+                        onPress={isLast ? submitProfile : next}
+                        disabled={loading}
+                        activeOpacity={0.9}
+                    >
+                        <LinearGradient colors={[C.primary, C.primaryDark]} style={s.mainGrad}>
+                            {loading ? (
+                                <ActivityIndicator color="#fff" size="small" />
+                            ) : (
+                                <>
+                                    <Text style={s.mainTxt}>{isLast ? "Save & Finish" : "Continue"}</Text>
+                                    <Ionicons
+                                        name={isLast ? "checkmark" : "arrow-forward"}
+                                        size={17}
+                                        color="#fff"
+                                    />
+                                </>
+                            )}
+                        </LinearGradient>
+                    </TouchableOpacity>
                 </View>
             </KeyboardAvoidingView>
         </SafeAreaView>
     );
 }
 
-function UploadPhoto({ photo, onPress }) {
-    return (
-        <TouchableOpacity style={styles.photoContainer} onPress={onPress}>
-            {photo ? (
-                <Image source={{ uri: photo.uri }} style={styles.photoImage} />
-            ) : (
-                <View style={styles.photoPlaceholder}>
-                    <LinearGradient
-                        colors={['#ffe0e0', '#fdb5b5']}
-                        style={styles.placeholderGradient}
-                    >
-                        <Ionicons name="camera" size={42} color="#e54646" />
-                        <Text style={styles.uploadText}>Upload </Text>
+// ─── Photo picker ─────────────────────────────────────────────
+function PhotoPicker({ photo, existing, onPress }) {
+    const uri = photo?.uri || (existing ? existing : null);
 
-                    </LinearGradient>
+    return (
+        <TouchableOpacity style={s.photoWrap} onPress={onPress} activeOpacity={0.85}>
+            {uri ? (
+                <>
+                    <Image source={{ uri }} style={s.photo} />
+                    <View style={s.photoEdit}>
+                        <Ionicons name="camera" size={13} color="#fff" />
+                    </View>
+                </>
+            ) : (
+                <View style={s.photoEmpty}>
+                    <Ionicons name="camera-outline" size={26} color={C.primary} />
+                    <Text style={s.photoTxt}>Add Photo</Text>
                 </View>
             )}
         </TouchableOpacity>
     );
 }
 
-const styles = StyleSheet.create({
-    safeArea: {
-        flex: 1,
-        backgroundColor: '#F8FAFC',
-    },
-    container: {
-        flex: 1,
-    },
+// ─── Overview screen ──────────────────────────────────────────
+function Overview({ student, stepStatus, generating, onEdit, onDownload, onBack }) {
+    const rows = [
+        ["Name", student?.name],
+        ["Phone", student?.phone],
+        ["Email", student?.email],
+        ["Location", [student?.district, student?.state].filter(Boolean).join(", ")],
+        ["Qualification", student?.highest_qualification],
+        ["Skill / Trade", student?.skill_trade],
+        ["Experience", student?.skill_year ? `${student.skill_year} yrs` : null],
+        ["Looking For", student?.looking_for],
+    ].filter(([, v]) => !!v);
+
+    return (
+        <SafeAreaView style={s.root} edges={["top"]}>
+            <StatusBar barStyle={"dark-content"} />
+
+            <LinearGradient colors={[C.primary, C.primaryDark]} style={s.header}>
+                <View style={s.headRow}>
+                    <TouchableOpacity onPress={onBack} hitSlop={10}>
+                        <Ionicons name="arrow-back" size={22} color="#fff" />
+                    </TouchableOpacity>
+                    <Text style={s.headTitle}>My Resume</Text>
+                    <View style={{ width: 22 }} />
+                </View>
+
+                <View style={s.readyBadge}>
+                    <Ionicons name="checkmark-circle" size={14} color="#fff" />
+                    <Text style={s.readyTxt}>Profile Complete · Ready to Download</Text>
+                </View>
+            </LinearGradient>
+
+            <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+                <Section title="SECTION STATUS" />
+
+                {STEPS.map((st, i) => (
+                    <View key={i} style={s.statusRow}>
+                        <View style={[s.statusIcon, { backgroundColor: stepStatus[i] ? "#D1FAE5" : "#FEE2E2" }]}>
+                            <Ionicons
+                                name={stepStatus[i] ? "checkmark" : "alert"}
+                                size={14}
+                                color={stepStatus[i] ? "#059669" : "#DC2626"}
+                            />
+                        </View>
+                        <Text style={s.statusTxt}>{st.title}</Text>
+                        <Text style={[s.statusTag, { color: stepStatus[i] ? "#059669" : "#DC2626" }]}>
+                            {stepStatus[i] ? "Complete" : "Incomplete"}
+                        </Text>
+                    </View>
+                ))}
+
+                <Section title="SAVED DETAILS" />
+
+                <View style={s.detailCard}>
+                    {rows.map(([k, v], i) => (
+                        <View
+                            key={k}
+                            style={[s.detailRow, i < rows.length - 1 && s.detailBorder]}
+                        >
+                            <Text style={s.detailKey}>{k}</Text>
+                            <Text style={s.detailVal} numberOfLines={2}>{v}</Text>
+                        </View>
+                    ))}
+                </View>
+
+                <View style={{ height: 20 }} />
+            </ScrollView>
+
+            <View style={s.bottomBar}>
+                <TouchableOpacity style={s.backBtn} onPress={onEdit}>
+                    <Ionicons name="create-outline" size={17} color={C.text} />
+                    <Text style={s.backTxt}>Edit</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                    style={s.mainBtn}
+                    onPress={onDownload}
+                    disabled={generating}
+                    activeOpacity={0.9}
+                >
+                    <LinearGradient colors={[C.primary, C.primaryDark]} style={s.mainGrad}>
+                        {generating ? (
+                            <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                            <>
+                                <Ionicons name="download-outline" size={17} color="#fff" />
+                                <Text style={s.mainTxt}>Download Resume</Text>
+                            </>
+                        )}
+                    </LinearGradient>
+                </TouchableOpacity>
+            </View>
+        </SafeAreaView>
+    );
+}
+
+// ─── Styles ───────────────────────────────────────────────────
+// PURANE styles same. Sirf ek line change:
+// mainBtn: { flex: 1 },   ← paddingBottom: 28 HATAO
+// ─── Styles ───────────────────────────────────────────────────
+const s = StyleSheet.create({
+    root: { flex: 1, backgroundColor: "#F6F7F9" },
+
     header: {
-        paddingTop: 50,
-        paddingBottom: 30,
-        borderBottomLeftRadius: 32,
-        borderBottomRightRadius: 32,
+        paddingHorizontal: 20,
+        paddingTop: 8,
+        paddingBottom: 18,
+        borderBottomLeftRadius: 22,
+        borderBottomRightRadius: 22,
     },
-    headerContent: {
-        paddingHorizontal: 24,
+    headRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 16,
     },
-    headerTitle: {
-        fontSize: 32,
-        fontWeight: '800',
-        color: '#fff',
-        marginBottom: 4,
+    headTitle: { fontSize: 17, fontWeight: "800", color: "#fff" },
+
+    progressTrack: {
+        height: 5,
+        backgroundColor: "rgba(255,255,255,0.28)",
+        borderRadius: 99,
+        overflow: "hidden",
     },
-    headerSubtitle: {
-        fontSize: 15,
-        color: 'rgba(255,255,255,0.85)',
-        marginBottom: 24,
-    },
-    progressContainer: {
-        marginTop: 8,
-    },
-    progressBg: {
-        height: 10,
-        backgroundColor: 'rgba(255,255,255,0.25)',
-        borderRadius: 999,
-        overflow: 'hidden',
-    },
-    progressFill: {
-        height: '100%',
-        backgroundColor: '#fff',
-        borderRadius: 999,
-    },
-    stepText: {
-        color: '#fff',
-        fontSize: 13,
-        fontWeight: '600',
-        marginTop: 10,
-        opacity: 0.9,
-    },
-    scrollContent: {
-        padding: 24,
-        paddingBottom: 100,
-    },
-    sectionTitle: {
-        fontSize: 18,
-        fontWeight: '700',
-        color: '#1E2937',
-        marginTop: 28,
-        marginBottom: 12,
-    },
-    inputWrap: {
-        marginBottom: 20,
-    },
-    label: {
-        fontSize: 14,
-        fontWeight: '700',
-        color: '#1E2937',
-        marginBottom: 8,
-    },
-    input: {
-        backgroundColor: '#fff',
-        borderRadius: 16,
-        paddingHorizontal: 18,
-        paddingVertical: 16,
-        fontSize: 15.5,
-        color: '#111827',
-        borderWidth: 1.5,
-        borderColor: '#E2E8F0',
-    },
-    multilineInput: {
-        height: 120,
-        textAlignVertical: 'top',
-    },
-    footerSpacer: {
-        height: 80,
-    },
-    bottomNav: {
-        position: 'absolute',
-        bottom: 0,
-        left: 0,
-        right: 0,
-        backgroundColor: '#fff',
-        flexDirection: 'row',
-        padding: 16,
-        paddingBottom: Platform.OS === 'ios' ? 28 : 46,
-        borderTopWidth: 1,
-        borderTopColor: '#F1F5F9',
-        gap: 12,
-    },
-    navButton: {
-        flex: 1 / 2,
-        height: 56,
-        borderRadius: 16,
-        backgroundColor: '#F1F5F9',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'row',
+    progressFill: { height: "100%", backgroundColor: "#fff", borderRadius: 99 },
+
+    stepRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 9 },
+    stepTxt: { fontSize: 12, fontWeight: "700", color: "rgba(255,255,255,0.92)" },
+
+    readyBadge: {
+        flexDirection: "row",
+        alignItems: "center",
         gap: 6,
+        alignSelf: "flex-start",
+        backgroundColor: "rgba(255,255,255,0.2)",
+        paddingHorizontal: 12,
+        paddingVertical: 7,
+        borderRadius: 20,
     },
-    navButtonText: {
-        fontWeight: '700',
-        color: '#4F46E5',
-        fontSize: 12,
+    readyTxt: { fontSize: 11.5, fontWeight: "700", color: "#fff" },
+
+    scroll: { padding: 18, paddingBottom: 30 },
+
+    // Photo
+    photoWrap: { alignSelf: "center", marginBottom: 22 },
+    photo: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        borderWidth: 3,
+        borderColor: C.primary,
     },
-    disabledBtn: {
-        backgroundColor: '#F8FAFC',
+    photoEdit: {
+        position: "absolute",
+        right: 2,
+        bottom: 2,
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        backgroundColor: C.primary,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 2,
+        borderColor: "#F6F7F9",
     },
-    disabledText: {
-        color: '#94A3B8',
+    photoEmpty: {
+        width: 96,
+        height: 96,
+        borderRadius: 48,
+        backgroundColor: C.primaryLight,
+        borderWidth: 2,
+        borderColor: C.primary,
+        borderStyle: "dashed",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 3,
     },
-    nextButton: {
-        flex: 1.4,
-    },
-    nextGradient: {
-        height: 56,
-        borderRadius: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        flexDirection: 'row',
+    photoTxt: { fontSize: 11, fontWeight: "800", color: C.primary },
+
+    // Status
+    statusRow: {
+        flexDirection: "row",
+        alignItems: "center",
         gap: 10,
+        backgroundColor: "#fff",
+        borderRadius: 12,
+        padding: 13,
+        marginBottom: 8,
+        borderWidth: 1,
+        borderColor: "#EDEDF2",
     },
-    nextButtonText: {
-        color: '#fff',
-        fontWeight: '800',
-        fontSize: 12,
+    statusIcon: {
+        width: 28,
+        height: 28,
+        borderRadius: 14,
+        alignItems: "center",
+        justifyContent: "center",
     },
-    photoContainer: {
-        alignSelf: 'center',
-        marginBottom: 32,
+    statusTxt: { flex: 1, fontSize: 13.5, fontWeight: "700", color: C.text },
+    statusTag: { fontSize: 11.5, fontWeight: "800" },
+
+    // Details
+    detailCard: {
+        backgroundColor: "#fff",
+        borderRadius: 16,
+        padding: 16,
+        borderWidth: 1,
+        borderColor: "#EDEDF2",
     },
-    photoImage: {
-        width: 138,
-        height: 138,
-        borderRadius: 70,
-        borderWidth: 4,
-        borderColor: '#fff',
+    detailRow: {
+        flexDirection: "row",
+        justifyContent: "space-between",
+        gap: 12,
+        paddingVertical: 10,
     },
-    photoPlaceholder: {
-        width: 138,
-        height: 138,
-        borderRadius: 70,
-        overflow: 'hidden',
-        borderWidth: 4,
-        borderColor: '#fff',
+    detailBorder: { borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+    detailKey: { fontSize: 13, color: C.textSec, fontWeight: "600" },
+    detailVal: {
+        fontSize: 13,
+        color: C.text,
+        fontWeight: "700",
+        maxWidth: "58%",
+        textAlign: "right",
     },
-    placeholderGradient: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
+
+    // Bottom bar
+    bottomBar: {
+        flexDirection: "row",
+        gap: 10,
+        padding: 14,
+        paddingBottom: Platform.OS === "ios" ? 26 : 18,
+        backgroundColor: "#fff",
+        borderTopWidth: 1,
+        borderTopColor: "#EDEDF2",
+    },
+    backBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 5,
+        paddingHorizontal: 18,
+        height: 50,
+        borderRadius: 13,
+        backgroundColor: "#F1F2F5",
+    },
+    backTxt: { fontSize: 13, fontWeight: "800", color: C.text },
+
+    mainBtn: { flex: 1, paddingBottom: 32 },
+    mainGrad: {
+        height: 50,
+        borderRadius: 13,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
         gap: 8,
     },
-    uploadText: {
-        color: '#e54646',
-        fontWeight: '700',
-        fontSize: 14,
-        marginTop: 6,
-    },
-    uploadSubtext: {
-        color: '#64748B',
-        fontSize: 11.5,
-    },
+    mainTxt: { fontSize: 14, fontWeight: "800", color: "#fff" },
 });

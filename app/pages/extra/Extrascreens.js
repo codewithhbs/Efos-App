@@ -8,7 +8,9 @@ import {
   FlatList,
   Image,
   Dimensions,
-  TextInput
+  TextInput,
+  ActivityIndicator,
+  RefreshControl
 } from "react-native"
 import { Ionicons } from "@expo/vector-icons"
 import { useSafeAreaInsets } from "react-native-safe-area-context"
@@ -21,6 +23,8 @@ import {
   quizQuestions
 } from "../../utils/dummyData"
 import { DoubtCard } from "../../components/Reuseable"
+import API from "../../utils/axiosInstanct"
+import { useEffect } from "react"
 
 const { width } = Dimensions.get("window")
 
@@ -510,7 +514,7 @@ export function CommunityScreen({ navigation }) {
       <FlatList
         data={doubts}
         keyExtractor={item => item.id}
-        renderItem={({ item }) => <DoubtCard doubt={item} onPress={() => {}} />}
+        renderItem={({ item }) => <DoubtCard doubt={item} onPress={() => { }} />}
         contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
         showsVerticalScrollIndicator={false}
       />
@@ -520,60 +524,257 @@ export function CommunityScreen({ navigation }) {
 
 // ---- NOTIFICATIONS SCREEN ----
 export function NotificationsScreen({ navigation }) {
-  const insets = useSafeAreaInsets()
-  return (
-    <View style={{ flex: 1, backgroundColor: COLORS.bg }}>
-      <View style={[extraStyles.pageHeader, { paddingTop: insets.top + 10 }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={22} color={COLORS.text} />
-        </TouchableOpacity>
-        <Text style={extraStyles.pageTitle}>Notifications</Text>
-        <TouchableOpacity>
+  const insets = useSafeAreaInsets();
+
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const fetchNotifications = async () => {
+    try {
+      const res = await API.get("/extra/notification");
+
+      setNotifications(res.data.data || []);
+    } catch (error) {
+      console.log(error?.response?.data || error);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchNotifications();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchNotifications();
+  };
+
+  const markAsRead = async (id) => {
+    try {
+      await API.put(`/extra/notification/read/${id}`);
+
+      setNotifications((prev) =>
+        prev.map((item) =>
+          item.id === id
+            ? {
+              ...item,
+              is_read: 1,
+            }
+            : item
+        )
+      );
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const markAllRead = async () => {
+    try {
+      await API.put("/extra/notification/read-all");
+
+      setNotifications((prev) =>
+        prev.map((item) => ({
+          ...item,
+          is_read: 1,
+        }))
+      );
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const deleteNotification = async (id) => {
+    try {
+      await API.delete(`/extra/notification/${id}`);
+
+      setNotifications((prev) =>
+        prev.filter((item) => item.id !== id)
+      );
+    } catch (error) {
+      console.log(error);
+    }
+  };
+
+  const renderItem = ({ item }) => (
+    <TouchableOpacity
+      activeOpacity={0.8}
+      onPress={() => {
+        if (!item.is_read) {
+          markAsRead(item.id);
+        }
+      }}
+    >
+      <View
+        style={[
+          extraStyles.notifCard,
+          !item.is_read && extraStyles.notifCardUnread,
+        ]}
+      >
+        <View
+          style={[
+            extraStyles.notifIcon,
+            {
+              backgroundColor: item.is_read
+                ? COLORS.bg
+                : COLORS.primaryLight,
+            },
+          ]}
+        >
+          <Ionicons
+            name="notifications"
+            size={22}
+            color={COLORS.primary}
+          />
+        </View>
+
+        <View style={{ flex: 1 }}>
+          <View style={extraStyles.notifTitleRow}>
+            <Text style={extraStyles.notifTitle}>
+              {item.title}
+            </Text>
+
+            {!item.is_read && (
+              <View style={extraStyles.unreadDot} />
+            )}
+          </View>
+
           <Text
-            style={{ fontSize: 12, fontWeight: "600", color: COLORS.primary }}
+            style={extraStyles.notifMsg}
+            numberOfLines={2}
+          >
+            {item.message}
+          </Text>
+
+          <Text style={extraStyles.notifTime}>
+            {new Date(item.created_at).toLocaleString()}
+          </Text>
+        </View>
+
+        <TouchableOpacity
+          onPress={() => deleteNotification(item.id)}
+        >
+          <Ionicons
+            name="trash-outline"
+            size={20}
+            color="#999"
+          />
+        </TouchableOpacity>
+      </View>
+    </TouchableOpacity>
+  );
+
+  return (
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: COLORS.bg,
+      }}
+    >
+      <View
+        style={[
+          extraStyles.pageHeader,
+          {
+            paddingTop: insets.top + 10,
+          },
+        ]}
+      >
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons
+            name="arrow-back"
+            size={22}
+            color={COLORS.text}
+          />
+        </TouchableOpacity>
+
+        <Text style={extraStyles.pageTitle}>
+          Notifications
+        </Text>
+
+        <TouchableOpacity onPress={markAllRead}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "600",
+              color: COLORS.primary,
+            }}
           >
             Mark all read
           </Text>
         </TouchableOpacity>
       </View>
 
-      <FlatList
-        data={notifications}
-        keyExtractor={item => item.id}
-        renderItem={({ item }) => (
-          <View
-            style={[
-              extraStyles.notifCard,
-              !item.read && extraStyles.notifCardUnread
-            ]}
-          >
+      {loading ? (
+        <View
+          style={{
+            flex: 1,
+            justifyContent: "center",
+          }}
+        >
+          <ActivityIndicator
+            size="large"
+            color={COLORS.primary}
+          />
+        </View>
+      ) : (
+        <FlatList
+          data={notifications}
+          keyExtractor={(item) => item.id.toString()}
+          renderItem={renderItem}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+            />
+          }
+          ListEmptyComponent={() => (
             <View
-              style={[
-                extraStyles.notifIcon,
-                { backgroundColor: item.read ? COLORS.bg : COLORS.primaryLight }
-              ]}
+              style={{
+                marginTop: 120,
+                alignItems: "center",
+              }}
             >
-              <Text style={{ fontSize: 22 }}>{item.icon}</Text>
-            </View>
-            <View style={{ flex: 1 }}>
-              <View style={extraStyles.notifTitleRow}>
-                <Text style={extraStyles.notifTitle}>{item.title}</Text>
-                {!item.read && <View style={extraStyles.unreadDot} />}
-              </View>
-              <Text style={extraStyles.notifMsg} numberOfLines={2}>
-                {item.message}
-              </Text>
-              <Text style={extraStyles.notifTime}>{item.time}</Text>
-            </View>
-          </View>
-        )}
-        contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
-        showsVerticalScrollIndicator={false}
-      />
-    </View>
-  )
-}
+              <Ionicons
+                name="notifications-off-outline"
+                size={70}
+                color="#bbb"
+              />
 
+              <Text
+                style={{
+                  marginTop: 15,
+                  fontSize: 17,
+                  fontWeight: "600",
+                }}
+              >
+                No Notifications
+              </Text>
+
+              <Text
+                style={{
+                  marginTop: 5,
+                  color: "#888",
+                }}
+              >
+                You're all caught up.
+              </Text>
+            </View>
+          )}
+          contentContainerStyle={{
+            padding: 16,
+            paddingBottom: 100,
+            flexGrow: 1,
+          }}
+          showsVerticalScrollIndicator={false}
+        />
+      )}
+    </View>
+  );
+}
 
 
 const extraStyles = StyleSheet.create({

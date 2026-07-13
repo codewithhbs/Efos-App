@@ -45,6 +45,9 @@ firebase-adminsdk*.json
 # secrets / keys
 credentials.json
 secret.json
+utils/efos-12456-firebase-adminsdk-fbsvc-17ef791edb.json
+utils/efosnew-firebase-adminsdk-fbsvc-f34ccc209e.json
+
 keys.json
 
 # typescript
