@@ -3,7 +3,7 @@ const getPool = require("../config/db");
 const { signToken, signRefreshToken, verifyToken } = require("../utils/jwt");
 const { sendEmail, sanitizeRecipient } = require("../utils/sendEmail");
 const pool = getPool();
-const generateOTP = () => Math.floor(1000 + Math.random() * 9999).toString(); //4 digit otp
+const generateOTP = () => Math.floor(100000 + Math.random() * 999999).toString(); //4 digit otp
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
