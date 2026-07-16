@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
     View,
     Text,
@@ -21,6 +21,7 @@ import * as LocalAuthentication from "expo-local-authentication";
 import { COLORS } from "../../utils/dummyData";
 import useAuthStore from "../../store/useAuthStore";
 import { AuthWarn, Loader } from "../../components/LoadingAndAuthWarn";
+import { useFocusEffect } from "@react-navigation/native";
 
 const MENU_SECTIONS = [
     {
@@ -73,7 +74,7 @@ const MENU_SECTIONS = [
     },
 
     {
-        title: "Support",
+        title: "Others",
         items: [
             {
                 icon: "help-circle-outline",
@@ -94,15 +95,16 @@ const MENU_SECTIONS = [
 export function ProfileScreen({ navigation }) {
 
     const insets = useSafeAreaInsets();
-
     const {
         user,
+        student,
         isLoading,
         isAuthenticated,
         logout,
         stats,
         fetchProfile,
     } = useAuthStore();
+    console.log(student)
 
     const [loggingOut, setLoggingOut] = useState(false);
 
@@ -116,9 +118,15 @@ export function ProfileScreen({ navigation }) {
     // FETCH PROFILE
     // =========================
 
-    useEffect(() => {
-        fetchProfile();
-    }, []);
+    useFocusEffect(
+        useCallback(() => {
+            fetchProfile();
+
+            return () => {
+                // Optional cleanup
+            };
+        }, [])
+    );
 
     // =========================
     // BIOMETRIC ENABLE
@@ -264,7 +272,7 @@ export function ProfileScreen({ navigation }) {
         );
     }
 
-    const avatarUri =
+    const avatarUri = student?.photo ? `https://api.epinfoways.com/${student?.photo}` :
         user?.avatarUrl?.replace("/svg", "/png") ||
         "https://i.pravatar.cc/150?img=3";
 
@@ -466,7 +474,7 @@ export function ProfileScreen({ navigation }) {
 
                 {/* BIOMETRIC */}
 
-               
+
 
                 {/* MENU */}
 

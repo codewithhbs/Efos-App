@@ -114,6 +114,11 @@ const REQUIRED = [
     ["skill_type", "skill_trade", "skill_year", "looking_for", "experience_type", "passport", "relocation"],
 ];
 
+const EMPTY_EXP = {
+    company_name: "", job_profile: "", job_duration: "",
+    job_state: "", job_district: "", salary_range: "", job_summary: "",
+};
+
 const requiredFor = (stepIdx, qual) =>
     stepIdx === 2 ? eduRequired(qual) : REQUIRED[stepIdx];
 
@@ -134,9 +139,10 @@ export default function ResumeBuilder({ navigation }) {
     const [editMode, setEditMode] = useState(false);
     const [loading, setLoading] = useState(false);
     const [generating, setGenerating] = useState(false);
-
+    const [experiences, setExperiences] = useState([]);
+    const isExp = (t) => !!t && t !== "Fresher";
     useEffect(() => { fetchProfile(); }, []);
-
+    // console.log(student)
     useEffect(() => {
         if (student) {
             setForm((prev) => {
@@ -146,6 +152,11 @@ export default function ResumeBuilder({ navigation }) {
                 });
                 return merged;
             });
+            let ex = student.experiences;
+            if (typeof ex === "string") { try { ex = JSON.parse(ex); } catch { ex = []; } }
+            if (Array.isArray(ex) && ex.length)
+                setExperiences(ex.map((e) => ({ ...EMPTY_EXP, ...e })));
+
         }
     }, [student]);
 
@@ -212,6 +223,16 @@ export default function ResumeBuilder({ navigation }) {
 
         return true;
     };
+    const addExp = () => setExperiences((e) => [...e, { ...EMPTY_EXP }]);
+    const removeExp = (i) => setExperiences((e) => e.filter((_, idx) => idx !== i));
+    const setExp = (i, k, v) =>
+        setExperiences((e) => e.map((x, idx) => (idx === i ? { ...x, [k]: v } : x)));
+
+    // auto-add first row when experienced chosen
+    useEffect(() => {
+        if (isExp(form.experience_type) && experiences.length === 0)
+            setExperiences([{ ...EMPTY_EXP }]);
+    }, [form.experience_type]);
 
     const next = () => {
         if (!validateStep()) return;
@@ -239,6 +260,12 @@ export default function ResumeBuilder({ navigation }) {
                 if (v !== "" && v != null) fd.append(k, String(v));
             });
 
+            if (isExp(form.experience_type)) {
+                const clean = experiences.filter(
+                    (e) => e.company_name?.trim() || e.job_profile?.trim()
+                );
+                fd.append("experiences", JSON.stringify(clean));
+            }
             if (photo) {
                 fd.append("photo", {
                     uri: photo.uri,
@@ -281,13 +308,13 @@ export default function ResumeBuilder({ navigation }) {
 
         const eduBlock = (title, sub, year, marks, stream) =>
             title
-                ? `<div class="edu">
-             <div class="edu-top">
-               <span class="edu-title">${esc(title)}</span>
-               <span class="edu-year">${esc(year || "")}</span>
+                ? `<div class="item">
+             <div class="item-top">
+               <span class="item-title">${esc(title)}</span>
+               <span class="item-year">${esc(year || "")}</span>
              </div>
-             <div class="edu-sub">${esc(sub || "")}</div>
-             <div class="edu-meta">
+             <div class="item-sub">${esc(sub || "")}</div>
+             <div class="item-meta">
                ${marks ? `<span class="pill">${esc(marks)}%</span>` : ""}
                ${stream ? `<span class="pill">${esc(stream)}</span>` : ""}
              </div>
@@ -296,7 +323,29 @@ export default function ResumeBuilder({ navigation }) {
 
         const location = [f.address, f.district, f.state].filter(Boolean).join(", ");
 
-        // sirf applicable sections PDF me
+        const expList = isExp(f.experience_type)
+            ? experiences.filter((e) => e.company_name || e.job_profile)
+            : [];
+
+        const expHtml = expList
+            .map((e) => {
+                const place = [e.job_district, e.job_state].filter(Boolean).join(", ");
+                return `<div class="item">
+              <div class="item-top">
+                <span class="item-title">${esc(e.job_profile || "Role")}</span>
+                <span class="item-year">${esc(e.job_duration || "")}</span>
+              </div>
+              <div class="item-sub">
+                ${e.company_name ? `<b>${esc(e.company_name)}</b>` : ""}${place ? ` &middot; ${esc(place)}` : ""}
+              </div>
+              <div class="item-meta">
+                ${e.salary_range ? `<span class="pill">${esc(e.salary_range)}</span>` : ""}
+              </div>
+              ${e.job_summary ? `<div class="item-desc">${esc(e.job_summary)}</div>` : ""}
+            </div>`;
+            })
+            .join("");
+
         const eduHtml = [
             flags.pg && f.pg_university
                 ? eduBlock(f.pg_field || "Post Graduation", f.pg_university, f.pg_year, f.pg_marks, f.pg_stream)
@@ -312,71 +361,97 @@ export default function ResumeBuilder({ navigation }) {
                 : "",
         ].join("");
 
+        // fallback summary jab profile_summary blank ho
+        const autoSummary = (() => {
+            const bits = [];
+            if (f.skill_trade) bits.push(esc(f.skill_trade));
+            if (f.experience_type) bits.push(esc(f.experience_type.toLowerCase()));
+            const head = bits.length ? bits.join(" professional, ") : "Motivated candidate";
+            const yrs = f.skill_year ? ` with ${esc(f.skill_year)} years of hands-on experience` : "";
+            const loc = f.district ? ` based in ${esc(f.district)}` : "";
+            const seek = f.looking_for ? ` Actively looking for ${esc(f.looking_for)} opportunities.` : "";
+            return `${head.charAt(0).toUpperCase() + head.slice(1)}${yrs}${loc}.${seek}`;
+        })();
+
+        const summaryText = f.profile_summary?.trim() ? esc(f.profile_summary) : autoSummary;
+
+        // key highlight chips
+        const chips = [
+            f.skill_year ? `${esc(f.skill_year)} yr Exp` : "",
+            f.experience_type ? esc(f.experience_type) : "",
+            f.looking_for ? esc(f.looking_for) : "",
+            f.relocation ? `Relocate: ${esc(f.relocation)}` : "",
+            f.passport ? `Passport: ${esc(f.passport)}` : "",
+        ].filter(Boolean);
+
         return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 <style>
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
   body {
     font-family: Helvetica, Arial, sans-serif;
     color: #1f2937;
-    margin: 0;
-    padding: 0;
     font-size: 12px;
     line-height: 1.6;
   }
 
+  /* Brand bar */
   .brandbar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 34px;
+    padding: 16px 34px;
     border-bottom: 4px solid #E53935;
   }
-  .brandbar img { height: 46px; }
-  .brand-right {
-    text-align: right;
-    font-size: 10px;
-    color: #6b7280;
-    line-height: 1.5;
-  }
+  .brandbar img { height: 44px; }
+  .brand-right { text-align: right; font-size: 10px; color: #6b7280; line-height: 1.5; }
   .brand-right b { color: #E53935; font-size: 11px; letter-spacing: .5px; }
 
+  /* Hero */
   .hero {
-    padding: 24px 34px 18px;
+    padding: 22px 34px 16px;
     display: flex;
     align-items: center;
     gap: 20px;
   }
   .avatar {
-    width: 84px; height: 84px;
+    width: 88px; height: 88px;
     border-radius: 50%;
     object-fit: cover;
     border: 3px solid #E53935;
     flex-shrink: 0;
   }
-  .hero h1 {
-    margin: 0 0 4px;
-    font-size: 24px;
-    letter-spacing: -.3px;
-    color: #0f172a;
-  }
-  .hero .role {
-    font-size: 12.5px;
-    color: #E53935;
-    font-weight: bold;
-    margin-bottom: 6px;
-  }
+  .hero h1 { font-size: 25px; letter-spacing: -.3px; color: #0f172a; margin-bottom: 3px; }
+  .hero .role { font-size: 13px; color: #E53935; font-weight: bold; margin-bottom: 7px; text-transform: uppercase; letter-spacing: .5px; }
   .hero .contact { font-size: 11px; color: #4b5563; }
-  .hero .contact span { margin-right: 12px; }
+  .hero .contact span { margin-right: 14px; white-space: nowrap; }
 
-  .wrap { padding: 0 34px 30px; }
+  /* Chips strip */
+  .chips { padding: 0 34px 6px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .chip {
+    background: #FFF1F1;
+    color: #B71C1C;
+    border: 1px solid #f3c9cc;
+    border-radius: 6px;
+    padding: 3px 10px;
+    font-size: 10px;
+    font-weight: bold;
+  }
 
-  .sec { margin-top: 20px; page-break-inside: avoid; }
+  .wrap { padding: 14px 34px 30px; }
+
+  /* Two-column body */
+  .cols { display: flex; gap: 30px; }
+  .main-col { flex: 1.7; }
+  .side-col { flex: 1; }
+
+  .sec { margin-top: 18px; page-break-inside: avoid; }
+  .sec:first-child { margin-top: 0; }
   .sec-title {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: bold;
     color: #E53935;
     text-transform: uppercase;
@@ -388,24 +463,17 @@ export default function ResumeBuilder({ navigation }) {
 
   .summary { font-size: 12px; color: #374151; text-align: justify; }
 
-  table { width: 100%; border-collapse: collapse; }
-  td { padding: 5px 0; vertical-align: top; font-size: 11.5px; }
-  .lbl { color: #6b7280; width: 42%; font-weight: 600; }
-  .val { color: #111827; font-weight: bold; }
+  /* Items (edu + experience) */
+  .item { padding: 8px 0; border-bottom: 1px dashed #e5e7eb; }
+  .item:last-child { border-bottom: 0; }
+  .item-top { display: flex; justify-content: space-between; align-items: baseline; }
+  .item-title { font-weight: bold; font-size: 12.5px; color: #111827; }
+  .item-year { font-size: 10.5px; color: #6b7280; white-space: nowrap; }
+  .item-sub { font-size: 11px; color: #4b5563; margin-top: 1px; }
+  .item-sub b { color: #111827; }
+  .item-meta { margin-top: 5px; }
+  .item-desc { font-size: 10.5px; color: #4b5563; margin-top: 4px; text-align: justify; }
 
-  .grid { display: flex; gap: 26px; }
-  .grid > div { flex: 1; }
-
-  .edu {
-    padding: 9px 0;
-    border-bottom: 1px dashed #e5e7eb;
-  }
-  .edu:last-child { border-bottom: 0; }
-  .edu-top { display: flex; justify-content: space-between; align-items: baseline; }
-  .edu-title { font-weight: bold; font-size: 12px; color: #111827; }
-  .edu-year { font-size: 10.5px; color: #6b7280; }
-  .edu-sub { font-size: 11px; color: #4b5563; margin-top: 1px; }
-  .edu-meta { margin-top: 5px; }
   .pill {
     display: inline-block;
     background: #FFEBEE;
@@ -418,8 +486,14 @@ export default function ResumeBuilder({ navigation }) {
     margin-right: 5px;
   }
 
+  /* Side tables */
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 4px 0; vertical-align: top; font-size: 11px; }
+  .lbl { color: #6b7280; width: 46%; font-weight: 600; }
+  .val { color: #111827; font-weight: bold; }
+
   .footer {
-    margin-top: 26px;
+    margin-top: 24px;
     padding-top: 12px;
     border-top: 1.5px solid #f1f1f4;
     display: flex;
@@ -437,7 +511,7 @@ export default function ResumeBuilder({ navigation }) {
     <img src="${EFOS_LOGO_BASE64}" alt="EFOS" />
     <div class="brand-right">
       <b>${esc(EFOS_TAGLINE.toUpperCase())}</b><br />
-      Verified Candidate Profile · ${esc(EFOS_SITE)}
+      Verified Candidate Profile &middot; ${esc(EFOS_SITE)}
     </div>
   </div>
 
@@ -445,82 +519,84 @@ export default function ResumeBuilder({ navigation }) {
     ${photo?.uri ? `<img class="avatar" src="${photo.uri}" />` : ""}
     <div>
       <h1>${esc(f.name || "Candidate Name")}</h1>
-      <div class="role">${esc(f.skill_trade || f.highest_qualification || "")}</div>
+      <div class="role">${esc(f.skill_trade || f.highest_qualification || "Job Seeker")}</div>
       <div class="contact">
         ${f.phone ? `<span>&#9742; ${esc(f.phone)}</span>` : ""}
         ${f.email ? `<span>&#9993; ${esc(f.email)}</span>` : ""}
-        ${f.whatsapp ? `<span>WhatsApp: ${esc(f.whatsapp)}</span>` : ""}
+        ${f.whatsapp ? `<span>&#128172; ${esc(f.whatsapp)}</span>` : ""}
       </div>
       ${location ? `<div class="contact" style="margin-top:3px">&#9906; ${esc(location)}${f.pincode ? " - " + esc(f.pincode) : ""}</div>` : ""}
     </div>
   </div>
 
+  ${chips.length ? `<div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join("")}</div>` : ""}
+
   <div class="wrap">
+    <div class="cols">
 
-    ${f.profile_summary ? `
-    <div class="sec">
-      <div class="sec-title">Profile Summary</div>
-      <div class="summary">${esc(f.profile_summary)}</div>
-    </div>` : ""}
+      <!-- LEFT / MAIN -->
+      <div class="main-col">
 
-    ${eduHtml ? `
-    <div class="sec">
-      <div class="sec-title">Education</div>
-      ${eduHtml}
-    </div>` : ""}
+        <div class="sec">
+          <div class="sec-title">Profile Summary</div>
+          <div class="summary">${summaryText}</div>
+        </div>
 
-    <div class="sec">
-      <div class="sec-title">Skills &amp; Career</div>
-      <div class="grid">
-        <div>
+        ${expHtml ? `
+        <div class="sec">
+          <div class="sec-title">Work Experience</div>
+          ${expHtml}
+        </div>` : ""}
+
+        ${eduHtml ? `
+        <div class="sec">
+          <div class="sec-title">Education</div>
+          ${eduHtml}
+        </div>` : ""}
+
+      </div>
+
+      <!-- RIGHT / SIDE -->
+      <div class="side-col">
+
+        <div class="sec">
+          <div class="sec-title">Skills &amp; Career</div>
           <table>
             ${row("Skill Type", f.skill_type)}
             ${row("Skill / Trade", f.skill_trade)}
             ${row("Experience", f.skill_year ? `${f.skill_year} Years` : "")}
-          </table>
-        </div>
-        <div>
-          <table>
-            ${row("Experience Type", f.experience_type)}
+            ${row("Exp. Type", f.experience_type)}
             ${row("Looking For", f.looking_for)}
             ${row("Present Status", f.present_status)}
           </table>
         </div>
-      </div>
-    </div>
 
-    <div class="sec">
-      <div class="sec-title">Personal Details</div>
-      <div class="grid">
-        <div>
+        <div class="sec">
+          <div class="sec-title">Personal</div>
           <table>
-            ${row("Father's Name", f.father_name)}
-            ${row("Mother's Name", f.mother_name)}
+            ${row("Father", f.father_name)}
+            ${row("Mother", f.mother_name)}
             ${row("Gender", f.gender)}
             ${row("Age Group", f.age_group?.replace("_", " - "))}
-          </table>
-        </div>
-        <div>
-          <table>
             ${row("Category", f.category)}
             ${row("Blood Group", f.blood_group)}
             ${row("Passport", f.passport)}
             ${row("Relocation", f.relocation)}
           </table>
         </div>
+
       </div>
     </div>
 
     <div class="footer">
-      <span>Generated via <b>EFOS</b> — ${esc(EFOS_TAGLINE)}</span>
+      <span>Generated via <b>EFOS</b> &mdash; ${esc(EFOS_TAGLINE)}</span>
       <span>${new Date().toLocaleDateString("en-IN")}</span>
     </div>
-
   </div>
 </body>
+            
 </html>`;
     };
-
     const generatePDF = async () => {
         setGenerating(true);
 
@@ -811,7 +887,7 @@ export default function ResumeBuilder({ navigation }) {
                                     options={SKILL_TYPE_OPTIONS} error={errors.skill_type} />
                             </Col>
                             <Col>
-                                <SelectField label="Experience" required icon="hourglass-outline"
+                                <SelectField label="SKill year" required icon="hourglass-outline"
                                     value={form.skill_year} onValueChange={(v) => set("skill_year", v)}
                                     options={EXPERIENCE_YEAR_OPTIONS} error={errors.skill_year} />
                             </Col>
@@ -834,6 +910,73 @@ export default function ResumeBuilder({ navigation }) {
                             </Col>
                         </Row>
 
+                        {isExp(form.experience_type) && (
+                            <>
+                                <Section title="WORK EXPERIENCE" />
+                                {experiences.map((ex, i) => {
+                                    const dOpts = getDistrictOptions(ex.job_state);
+                                    return (
+                                        <View key={i} style={s.expCard}>
+                                            <View style={s.expHead}>
+                                                <Text style={s.expHeadTxt}>Experience {i + 1}</Text>
+                                                {experiences.length > 1 && (
+                                                    <TouchableOpacity onPress={() => removeExp(i)} hitSlop={8}>
+                                                        <Ionicons name="trash-outline" size={18} color="#DC2626" />
+                                                    </TouchableOpacity>
+                                                )}
+                                            </View>
+
+                                            <Field label="Company Name" icon="business-outline" autoCapitalize="words"
+                                                placeholder="Enter company"
+                                                value={ex.company_name} onChangeText={(v) => setExp(i, "company_name", v)} />
+
+                                            <Row>
+                                                <Col>
+                                                    <Field label="Job Profile" icon="briefcase-outline"
+                                                        placeholder="e.g. Electrician"
+                                                        value={ex.job_profile} onChangeText={(v) => setExp(i, "job_profile", v)} />
+                                                </Col>
+                                                <Col>
+                                                    <Field label="Duration" icon="time-outline"
+                                                        placeholder="e.g. 2 Years"
+                                                        value={ex.job_duration} onChangeText={(v) => setExp(i, "job_duration", v)} />
+                                                </Col>
+                                            </Row>
+
+                                            <Row>
+                                                <Col>
+                                                    <SelectField label="State" icon="map-outline" searchable
+                                                        placeholder="Select State"
+                                                        value={ex.job_state}
+                                                        onValueChange={(v) => { setExp(i, "job_state", v); setExp(i, "job_district", ""); }}
+                                                        options={STATE_OPTIONS} />
+                                                </Col>
+                                                <Col>
+                                                    <SelectField label="District" icon="location-outline" searchable
+                                                        placeholder={ex.job_state ? "Select District" : "Pick state first"}
+                                                        value={ex.job_district}
+                                                        onValueChange={(v) => setExp(i, "job_district", v)}
+                                                        options={dOpts} disabled={!ex.job_state} />
+                                                </Col>
+                                            </Row>
+
+                                            <Field label="Salary Range" icon="cash-outline"
+                                                placeholder="e.g. 15k - 20k"
+                                                value={ex.salary_range} onChangeText={(v) => setExp(i, "salary_range", v)} />
+
+                                            <Field label="Job Summary" icon="document-text-outline" multiline
+                                                placeholder="Role, responsibilities..."
+                                                value={ex.job_summary} onChangeText={(v) => setExp(i, "job_summary", v)} />
+                                        </View>
+                                    );
+                                })}
+
+                                <TouchableOpacity style={s.addExpBtn} onPress={addExp} activeOpacity={0.85}>
+                                    <Ionicons name="add-circle-outline" size={18} color={C.primary} />
+                                    <Text style={s.addExpTxt}>Add Another Experience</Text>
+                                </TouchableOpacity>
+                            </>
+                        )}
                         <Row>
                             <Col>
                                 <SelectField label="Passport" required icon="airplane-outline"
@@ -949,7 +1092,7 @@ export default function ResumeBuilder({ navigation }) {
 
 // ─── Photo picker ─────────────────────────────────────────────
 function PhotoPicker({ photo, existing, onPress }) {
-    const uri = photo?.uri || (existing ? existing : null);
+    const uri = photo?.uri || (existing ? `https://api.epinfoways.com/${existing}` : null);
 
     return (
         <TouchableOpacity style={s.photoWrap} onPress={onPress} activeOpacity={0.85}>
@@ -1226,5 +1369,34 @@ const s = StyleSheet.create({
         justifyContent: "center",
         gap: 8,
     },
+    expCard: {
+        backgroundColor: "#fff",
+        borderRadius: 14,
+        padding: 14,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: "#EDEDF2",
+    },
+    expHead: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 10,
+    },
+    expHeadTxt: { fontSize: 13, fontWeight: "800", color: C.primary },
+    addExpBtn: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 6,
+        height: 46,
+        borderRadius: 12,
+        borderWidth: 1.5,
+        borderColor: C.primary,
+        borderStyle: "dashed",
+        backgroundColor: C.primaryLight,
+        marginBottom: 4,
+    },
+    addExpTxt: { fontSize: 13, fontWeight: "800", color: C.primary },
     mainTxt: { fontSize: 14, fontWeight: "800", color: "#fff" },
 });

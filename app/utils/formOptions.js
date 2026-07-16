@@ -236,12 +236,7 @@ export const EXPERIENCE_YEAR_OPTIONS = [
 
 export const EXPERIENCE_TYPE_OPTIONS = opt([
   "Fresher",
-  "Full Time",
-  "Part Time",
-  "Internship",
-  "Freelance",
-  "Contract",
-  "Self Employed",
+  "Experienced"
 ]);
 
 export const YES_NO_OPTIONS = [

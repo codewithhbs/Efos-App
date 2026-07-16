@@ -26,6 +26,7 @@ import HomeHero from '../../components/HomeComponents/HomeHero';
 import JobCard from '../../components/HomeComponents/JobCard';
 import ResumeFab from './ResumeFab';
 import BlogsComponent from './BlogsComponent';
+import { useFocusEffect } from '@react-navigation/native';
 
 const { width } = Dimensions.get('window');
 
@@ -69,7 +70,7 @@ const skeletonStyles = StyleSheet.create({
 });
 
 export default function HomeScreen({ navigation }) {
-  const { user, isLoading: authLoading, isAuthenticated } = useAuthStore();
+  const { user, isLoading: authLoading, isAuthenticated, student, fetchProfile } = useAuthStore();
   const insets = useSafeAreaInsets();
   const [refreshing, setRefreshing] = useState(false);
   const [searchText, setSearchText] = useState('');
@@ -114,6 +115,10 @@ export default function HomeScreen({ navigation }) {
     finally { setCoursesLoading(false); }
   }, []);
 
+  const avatarUri = student?.photo ? `https://api.epinfoways.com/${student?.photo}` :
+    user?.avatarUrl?.replace("/svg", "/png") ||
+    "https://i.pravatar.cc/150?img=3";
+
   const fetchOpportunities = useCallback(async () => {
     setOppLoading(true);
     setJobsLoading(true);
@@ -134,10 +139,19 @@ export default function HomeScreen({ navigation }) {
     }
   }, []);
 
-  useEffect(() => {
-    fetchFeaturedCourses();
-    fetchOpportunities();
-  }, []);
+
+  useFocusEffect(
+    useCallback(() => {
+      fetchProfile();
+      fetchFeaturedCourses();
+      fetchOpportunities();
+      return () => {
+        // Optional cleanup
+      };
+    }, [])
+  );
+
+
   const onRefresh = useCallback(async () => {
     try {
       setRefreshing(true);
@@ -192,7 +206,7 @@ export default function HomeScreen({ navigation }) {
             </TouchableOpacity>
             <TouchableOpacity onPress={() => navigation.navigate('Profile')} style={styles.avatarWrap}>
               <Image
-                source={{ uri: user?.avatarUrl?.replace('/svg', '/png') || 'https://i.pravatar.cc/150?img=3' }}
+                source={{ uri: avatarUri || 'https://i.pravatar.cc/150?img=3' }}
                 style={styles.avatar}
               />
               <View style={styles.avatarOnline} />
@@ -271,7 +285,7 @@ export default function HomeScreen({ navigation }) {
                   isSelected={selectedOpp === item.id}
                   onPress={() => {
                     setSelectedOpp(item.id);
-                    navigation.navigate('Jobs', {id:item.id, categorySlug: item.slug, categoryName: item.name });
+                    navigation.navigate('Jobs', { id: item.id, categorySlug: item.slug, categoryName: item.name });
                   }}
                 />
               ))}
@@ -373,7 +387,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         )}
 
-      <BlogsComponent/>
+        <BlogsComponent />
         <View style={{ height: 32 }} />
       </ScrollView>
       <ResumeFab

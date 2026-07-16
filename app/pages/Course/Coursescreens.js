@@ -238,7 +238,7 @@ const CourseCard = memo(({ item, onWishlist, wishlist, onPress }) => {
           </Text>
 
           <View style={styles.metaRow}>
-          
+
             {item.language && (
               <View style={[styles.metaChip, { backgroundColor: T.surface }]}>
                 <Ionicons name="globe-outline" size={9} color={T.textSub} />
@@ -260,7 +260,9 @@ const CourseCard = memo(({ item, onWishlist, wishlist, onPress }) => {
               <Text style={styles.enrolledText}>Enrolled</Text>
             </View>
           ) : (
-            <TouchableOpacity style={styles.ctaBtn} activeOpacity={0.85}>
+            <TouchableOpacity onPress={onPress}
+              onPressIn={onIn}
+              onPressOut={onOut} style={styles.ctaBtn} activeOpacity={0.85}>
               <Text style={styles.ctaText}>
                 {item.final_price === 0 ? "Start Free" : "Enroll Now"}
               </Text>

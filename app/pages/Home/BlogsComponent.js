@@ -54,7 +54,7 @@ export default function BlogsComponent() {
             <View style={s.head}>
                 <View style={s.headLeft}>
                     <View style={s.headBar} />
-                    <Text style={s.headTitle}>Latest Blogs</Text>
+                    <Text style={s.headTitle}>Career Updates</Text>
                 </View>
                 <TouchableOpacity
                     style={s.viewAll}

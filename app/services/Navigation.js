@@ -152,11 +152,11 @@ export default function Navigation() {
         <Stack.Screen name="AllMentorsBookings" component={BookedSessions} />
         {/* applications */}
         <Stack.Screen name="applications" component={MyAllApplications} />
+        
         {/* Payments */}
+
         <Stack.Screen name="Payments" component={MyPayments} />
-
         <Stack.Screen name="Jobs" component={AllJobs} />
-
         <Stack.Screen name="ResumeBuilder" component={ResumeBuilder} />
         <Stack.Screen name="Settings" component={SettingsScreen} />
         <Stack.Screen name="Notifications" component={NotificationsScreen} />

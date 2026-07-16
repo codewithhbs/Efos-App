@@ -26,11 +26,9 @@ const STATS = [
 
 const CATEGORIES = [
   { label: 'Skill Courses', icon: 'book-outline', color: '#6366F1', bg: '#EEF2FF', route: 'Courses' },
-  { label: 'Bundle Courses', icon: 'layers-outline', color: '#8B5CF6', bg: '#F5F3FF', route: 'BundleCoursesScreen' },
-
+  { label: 'Career Updates', icon: 'newspaper-outline', color: '#8B5CF6', bg: '#F5F3FF', route: 'AllBlogs' },
   { label: 'Opportunities', icon: 'briefcase-outline', color: '#10B981', bg: '#ECFDF5', route: 'Jobs' },
   { label: 'Build Resume', icon: 'clipboard-outline', color: '#F59E0B', bg: '#FFFBEB', route: 'ResumeBuilder' },
-  // { label: 'Quizzes', icon: 'help-circle-outline', color: '#EC4899', bg: '#FDF2F8', route: 'QuizzesScreen' },
 ];
 
 const formatEventDate = (dateStr) => {
@@ -73,6 +71,57 @@ const PulseDot = ({ color }) => {
   );
 };
 
+
+const BundleCTA = ({ onPress }) => {
+  const glow = useRef(new Animated.Value(0)).current;
+  const shine = useRef(new Animated.Value(-1)).current;
+
+  useEffect(() => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(glow, { toValue: 1, duration: 900, useNativeDriver: false }),
+        Animated.timing(glow, { toValue: 0, duration: 900, useNativeDriver: false }),
+      ])
+    ).start();
+    Animated.loop(
+      Animated.timing(shine, { toValue: 2, duration: 1800, useNativeDriver: true })
+    ).start();
+  }, []);
+
+  const shadowOpacity = glow.interpolate({ inputRange: [0, 1], outputRange: [0.25, 0.7] });
+  const translateX = shine.interpolate({ inputRange: [-1, 2], outputRange: [-220, 220] });
+
+  return (
+    <Animated.View style={[styles.bundleWrap, { shadowOpacity }]}>
+      <TouchableOpacity activeOpacity={0.9} onPress={onPress}>
+        <LinearGradient
+          colors={['#F59E0B', '#EF4444', '#EC4899']}
+          start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+          style={styles.bundleBtn}
+        >
+          {/* shine sweep */}
+          <Animated.View style={[styles.bundleShine, { transform: [{ translateX }, { rotate: '20deg' }] }]} />
+
+          <View style={styles.bundleOff}>
+            <Text style={styles.bundleOffText}>90%</Text>
+            <Text style={styles.bundleOffSub}>OFF</Text>
+          </View>
+
+          <View style={{ flex: 1 }}>
+            <Text style={styles.bundleTitle}>Explore Bundle Courses</Text>
+            <Text style={styles.bundleSub} numberOfLines={2}>
+              Join multiple courses at a discount up to 90%
+            </Text>
+          </View>
+
+          <View style={styles.bundleArrow}>
+            <Ionicons name="arrow-forward" size={16} color="#EF4444" />
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+};
 const CategoryCard = ({ item, index, onPress }) => {
   const scaleAnim = useRef(new Animated.Value(0.7)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -223,7 +272,7 @@ export default function HomeHero({ user, onExplore, onJoinLive, navigation }) {
         setEvents(res.data?.data || []);
       } catch (e) { }
     };
-    fetchEvents();
+    // fetchEvents();
   }, [user]);
   const handleCategoryPress = (item) => {
     navigation.navigate(item.route);
@@ -296,11 +345,18 @@ export default function HomeHero({ user, onExplore, onJoinLive, navigation }) {
           <Text style={styles.floatBadgeText}>Top Rated</Text>
         </Animated.View> */}
       </View>
-
       <View style={styles.categoriesSection}>
         <View style={styles.categoriesGrid}>
-          {CATEGORIES.map((item, i) => (
+          {CATEGORIES.slice(0, 2).map((item, i) => (
             <CategoryCard onPress={(item) => handleCategoryPress(item)} key={item.label} item={item} index={i} />
+          ))}
+        </View>
+
+        <BundleCTA onPress={() => navigation.navigate('BundleCoursesScreen')} />
+
+        <View style={styles.categoriesGrid}>
+          {CATEGORIES.slice(2).map((item, i) => (
+            <CategoryCard onPress={(item) => handleCategoryPress(item)} key={item.label} item={item} index={i + 2} />
           ))}
         </View>
       </View>
@@ -723,5 +779,51 @@ const styles = StyleSheet.create({
     color: '#374151',
     textAlign: 'center',
     lineHeight: 14,
+  },
+  bundleWrap: {
+    marginTop: 4,
+    borderRadius: 16,
+    shadowColor: '#EF4444',
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  bundleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    borderRadius: 16,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    overflow: 'hidden',
+  },
+  bundleShine: {
+    position: 'absolute',
+    top: -20,
+    width: 60,
+    height: 140,
+    backgroundColor: 'rgba(255,255,255,0.28)',
+  },
+  bundleOff: {
+    width: 52,
+    height: 52,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(255,255,255,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bundleOffText: { fontSize: 17, fontWeight: '900', color: '#fff', lineHeight: 19 },
+  bundleOffSub: { fontSize: 9, fontWeight: '800', color: '#fff', letterSpacing: 1 },
+  bundleTitle: { fontSize: 14.5, fontWeight: '900', color: '#fff', letterSpacing: -0.2 },
+  bundleSub: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.9)', marginTop: 2, lineHeight: 15 },
+  bundleArrow: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#fff',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

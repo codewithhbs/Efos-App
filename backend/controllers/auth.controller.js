@@ -3,7 +3,7 @@ const getPool = require("../config/db");
 const { signToken, signRefreshToken, verifyToken } = require("../utils/jwt");
 const { sendEmail, sanitizeRecipient } = require("../utils/sendEmail");
 const pool = getPool();
-const generateOTP = () => Math.floor(100000 + Math.random() * 999999).toString(); //4 digit otp
+const generateOTP = () => Math.floor(1000 + Math.random() * 9999).toString(); //4 digit otp
 const PDFDocument = require('pdfkit');
 const fs = require('fs');
 const path = require('path');
@@ -1264,6 +1264,25 @@ exports.getProfile = async (req, res) => {
         let totalApply = 0;
 
         if (student) {
+            // Fetch experiences
+            const [exps] = await pool.query(
+                `SELECT
+                    company_name,
+                    job_profile,
+                    job_duration,
+                    job_state,
+                    job_district,
+                    salary_range,
+                    job_summary
+                 FROM student_experiences
+                 WHERE student_id = ?
+                 ORDER BY id ASC`,
+                [student.id]
+            );
+
+            student.experiences = exps;
+
+            // Count job applications
             const [[applyCount]] = await pool.query(
                 `SELECT COUNT(*) AS total_apply
                  FROM job_applications
@@ -1293,7 +1312,6 @@ exports.getProfile = async (req, res) => {
         });
     }
 };
-
 // ─── Delete Account ───────────────────────────────────────────────────────────
 exports.deleteUser = async (req, res) => {
     try {
@@ -1339,12 +1357,13 @@ exports.updateStudentProfile = async (req, res) => {
         }
 
         const studentId = students[0].id;
-        console.log(req.body)
+
         const {
             name, phone, email, whatsapp, age_group, gender, present_status,
             state, district, pincode, address, looking_for, profile_summary,
             father_name, mother_name, category, blood_group,
             highest_qualification,
+            experiences,
             tenth_board, tenth_year, tenth_marks, tenth_stream,
             twelfth_board, twelfth_year, twelfth_marks, twelfth_stream,
             graduation_university, graduation_year, graduation_marks,
@@ -1413,6 +1432,51 @@ exports.updateStudentProfile = async (req, res) => {
                 photoPath, studentId
             ]
         );
+
+        // ─── Experiences sync ─────────────────────────────
+        const isExp = (t) => !!t && t !== "Fresher";
+
+        let expList = experiences;
+        if (typeof expList === "string") {
+            try { expList = JSON.parse(expList); } catch { expList = []; }
+        }
+        if (!Array.isArray(expList)) expList = [];
+
+        if (isExp(experience_type)) {
+            await pool.query(
+                `DELETE FROM student_experiences WHERE student_id = ?`,
+                [studentId]
+            );
+
+            const rows = expList.filter(
+                (e) => e && (String(e.company_name || "").trim() || String(e.job_profile || "").trim())
+            );
+
+            for (const e of rows) {
+                await pool.query(
+                    `INSERT INTO student_experiences
+                        (student_id, company_name, job_profile, job_duration,
+                         job_state, job_district, salary_range, job_summary,
+                         created_at, updated_at)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+                    [
+                        studentId,
+                        e.company_name || null,
+                        e.job_profile || null,
+                        e.job_duration || null,
+                        e.job_state || null,
+                        e.job_district || null,
+                        e.salary_range || null,
+                        e.job_summary || null,
+                    ]
+                );
+            }
+        } else {
+            await pool.query(
+                `DELETE FROM student_experiences WHERE student_id = ?`,
+                [studentId]
+            );
+        }
 
         return res.status(200).json({
             success: true,

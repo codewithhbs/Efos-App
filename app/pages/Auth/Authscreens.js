@@ -609,7 +609,7 @@ export function LoginScreen({ navigation }) {
                   icon="key-outline"
                   placeholder="4-digit code"
                   keyboardType="number-pad"
-                  maxLength={6}
+                  maxLength={4}
                   value={otp}
                   onChangeText={setOtp}
                   scrollRef={scrollRef}
@@ -1019,13 +1019,12 @@ export function SignupScreen({ navigation }) {
                   icon="key-outline"
                   placeholder="4-digit code"
                   keyboardType="number-pad"
-                  maxLength={6}
+                  maxLength={4}
                   value={otp}
                   onChangeText={setOtp}
                   scrollRef={scrollRef}
                   scrollY={0}
                 />
-
                 <View style={s.switchRow}>
                   <Text style={s.switchTxt}>Didn't receive OTP? </Text>
                   <TouchableOpacity onPress={handleResendRegisterOtp}>
@@ -1199,7 +1198,7 @@ export function ForgotPasswordScreen({ navigation }) {
 // OTP (forget-password confirm)
 // ════════════════════════════════════════════════════════════
 export function OTPScreen({ route, navigation }) {
-  const [otp, setOtp] = useState(["", "", "", "", "", ""]);
+  const [otp, setOtp] = useState(["", "", "", ""]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -1216,15 +1215,14 @@ export function OTPScreen({ route, navigation }) {
     Animated.timing(shakeAnim, { toValue: -6, duration: 55, useNativeDriver: true }),
     Animated.timing(shakeAnim, { toValue: 0, duration: 55, useNativeDriver: true }),
   ]).start();
-
   const handleChange = (i, v) => {
     if (v.length > 1) {
-      const digits = v.replace(/\D/g, "").slice(0, 6).split("");
-      const next = ["", "", "", "", "", ""];
+      const digits = v.replace(/\D/g, "").slice(0, 4).split("");
+      const next = ["", "", "", ""];
       digits.forEach((d, idx) => (next[idx] = d));
       setOtp(next);
       setError("");
-      inputs.current[Math.min(digits.length, 5)]?.focus();
+      inputs.current[Math.min(digits.length, 3)]?.focus();
       return;
     }
 
@@ -1232,9 +1230,8 @@ export function OTPScreen({ route, navigation }) {
     next[i] = v;
     setOtp(next);
     setError("");
-    if (v && i < 5) inputs.current[i + 1]?.focus();
+    if (v && i < 3) inputs.current[i + 1]?.focus();
   };
-
   const handleKey = (i, k) => {
     if (k === "Backspace" && !otp[i] && i > 0) inputs.current[i - 1]?.focus();
   };
@@ -1243,7 +1240,7 @@ export function OTPScreen({ route, navigation }) {
     Keyboard.dismiss();
 
     const code = otp.join("");
-    if (code.length !== 6) { setError("Enter all 6 digits"); shake(); return; }
+    if (code.length !== 4) { setError("Enter all 4 digits"); shake(); return; }
 
     setLoading(true);
     try {
@@ -1271,7 +1268,7 @@ export function OTPScreen({ route, navigation }) {
       const r = await resendForgetPasswordOtp(email);
 
       if (r.success) {
-        setOtp(["", "", "", "", "", ""]);
+        setOtp(["", "", "", ""]);
         setError("");
         inputs.current[0]?.focus();
         Alert.alert("Success", r.message);
@@ -1312,7 +1309,7 @@ export function OTPScreen({ route, navigation }) {
                   key={i}
                   ref={(r) => (inputs.current[i] = r)}
                   style={[s.otpBox, d && s.otpBoxFilled, error && s.otpBoxErr]}
-                  maxLength={6}
+                  maxLength={4}
                   keyboardType="number-pad"
                   value={d}
                   onChangeText={(v) => handleChange(i, v)}
