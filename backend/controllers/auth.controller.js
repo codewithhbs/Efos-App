@@ -719,8 +719,20 @@ exports.forgetPassword = async (req, res) => {
             [otp, new_password, user.id]
         );
 
-        const mail = await sendEmail({ to: user.email, subject: "...", html: `...` });
 
+        const mail = await sendEmail({
+            to: user.email,
+            subject: "EFOS Password Reset OTP",
+            html: `
+                <div style="font-family:sans-serif">
+                    <h2>New OTP for Password Reset</h2>
+                    <p>Hello ${user.name},</p>
+                    <p>Your new OTP is:</p>
+                    <h1 style="letter-spacing:6px; color:#E53935">${otp}</h1>
+                    <p>This OTP will expire in 5 minutes.</p>
+                </div>
+            `,
+        });
         if (!mail.success) {
             await pool.query(
                 `UPDATE users SET forget_otp = NULL, new_password = NULL, forget_otp_expiry = NULL WHERE id = ?`,
