@@ -323,10 +323,8 @@ export default function ResumeBuilder({ navigation }) {
 
         const location = [f.address, f.district, f.state].filter(Boolean).join(", ");
 
-        const expList = isExp(f.experience_type)
-            ? experiences.filter((e) => e.company_name || e.job_profile)
-            : [];
-
+        console.log(student.experience_type, student.experiences)
+        const expList = experiences.filter((e) => e.company_name?.trim() || e.job_profile?.trim());
         const expHtml = expList
             .map((e) => {
                 const place = [e.job_district, e.job_state].filter(Boolean).join(", ");
@@ -511,12 +509,15 @@ export default function ResumeBuilder({ navigation }) {
     <img src="${EFOS_LOGO_BASE64}" alt="EFOS" />
     <div class="brand-right">
       <b>${esc(EFOS_TAGLINE.toUpperCase())}</b><br />
-      Verified Candidate Profile &middot; ${esc(EFOS_SITE)}
+      Associate with efos &middot; ${esc(EFOS_SITE)}
     </div>
   </div>
 
   <div class="hero">
-    ${photo?.uri ? `<img class="avatar" src="${photo.uri}" />` : ""}
+   ${(() => {
+                const avatarUri = photo?.uri || (student?.photo ? `https://api.epinfoways.com/${student.photo}` : "");
+                return avatarUri ? `<img class="avatar" src="${avatarUri}" />` : "";
+            })()}
     <div>
       <h1>${esc(f.name || "Candidate Name")}</h1>
       <div class="role">${esc(f.skill_trade || f.highest_qualification || "Job Seeker")}</div>
