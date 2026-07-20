@@ -323,7 +323,7 @@ export default function ResumeBuilder({ navigation }) {
 
         const location = [f.address, f.district, f.state].filter(Boolean).join(", ");
 
-        console.log(student.experience_type, student.experiences)
+      
         const expList = experiences.filter((e) => e.company_name?.trim() || e.job_profile?.trim());
         const expHtml = expList
             .map((e) => {
@@ -409,12 +409,22 @@ export default function ResumeBuilder({ navigation }) {
   .brand-right b { color: #E53935; font-size: 11px; letter-spacing: .5px; }
 
   /* Hero */
-  .hero {
-    padding: 22px 34px 16px;
-    display: flex;
-    align-items: center;
-    gap: 20px;
-  }
+.hero {
+  padding: 22px 34px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+}
+.hero-info { flex: 1; }
+.hero-photo { flex-shrink: 0; }
+.avatar {
+  width: 88px; height: 88px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #E53935;
+  display: block;
+}
   .avatar {
     width: 88px; height: 88px;
     border-radius: 50%;
@@ -509,27 +519,27 @@ export default function ResumeBuilder({ navigation }) {
     <img src="${EFOS_LOGO_BASE64}" alt="EFOS" />
     <div class="brand-right">
       <b>${esc(EFOS_TAGLINE.toUpperCase())}</b><br />
-      Associate with efos &middot; ${esc(EFOS_SITE)}
+      Associate with &middot; ${esc(EFOS_SITE)}
     </div>
   </div>
-
-  <div class="hero">
-   ${(() => {
-                const avatarUri = photo?.uri || (student?.photo ? `https://api.epinfoways.com/${student.photo}` : "");
-                return avatarUri ? `<img class="avatar" src="${avatarUri}" />` : "";
-            })()}
-    <div>
-      <h1>${esc(f.name || "Candidate Name")}</h1>
-      <div class="role">${esc(f.skill_trade || f.highest_qualification || "Job Seeker")}</div>
-      <div class="contact">
-        ${f.phone ? `<span>&#9742; ${esc(f.phone)}</span>` : ""}
-        ${f.email ? `<span>&#9993; ${esc(f.email)}</span>` : ""}
-        ${f.whatsapp ? `<span>&#128172; ${esc(f.whatsapp)}</span>` : ""}
-      </div>
-      ${location ? `<div class="contact" style="margin-top:3px">&#9906; ${esc(location)}${f.pincode ? " - " + esc(f.pincode) : ""}</div>` : ""}
+<div class="hero">
+  <div class="hero-info">
+    <h1>${esc(f.name || "Candidate Name")}</h1>
+    <div class="role">${esc(f.skill_trade || f.highest_qualification || "Job Seeker")}</div>
+    <div class="contact">
+      ${f.phone ? `<span>&#9742; ${esc(f.phone)}</span>` : ""}
+      ${f.email ? `<span>&#9993; ${esc(f.email)}</span>` : ""}
+      ${f.whatsapp ? `<span>&#128172; ${esc(f.whatsapp)}</span>` : ""}
     </div>
+    ${location ? `<div class="contact" style="margin-top:3px">&#9906; ${esc(location)}${f.pincode ? " - " + esc(f.pincode) : ""}</div>` : ""}
   </div>
-
+  <div class="hero-photo">
+    ${(() => {
+      const avatarUri = photo?.uri || (student?.photo ? `https://api.epinfoways.com/${student.photo}` : "");
+      return avatarUri ? `<img class="avatar" src="${avatarUri}" />` : "";
+    })()}
+  </div>
+</div>
   ${chips.length ? `<div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join("")}</div>` : ""}
 
   <div class="wrap">
