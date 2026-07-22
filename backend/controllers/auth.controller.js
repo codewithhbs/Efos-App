@@ -102,7 +102,7 @@ const issueSession = async (req, res, user, fcm_token = null) => {
 // ─── Register ─────────────────────────────────────────────────────────────────
 // controllers/authController.js → replace exports.registerUser with this
 
-const ALLOWED_AGE_GROUPS = ["16_18", "19_21", "22_25", "26_30"];
+const ALLOWED_AGE_GROUPS = ["16_18", "19_21", "22_25", "26_30","31_40"];
 const ALLOWED_GENDERS = ["Male", "Female", "Others"];
 
 exports.registerUser = async (req, res) => {

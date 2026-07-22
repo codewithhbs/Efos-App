@@ -48,15 +48,13 @@ router.post("/apply-coupon", applyCoupon);
 // ========================
 // ENROLLED COURSES ROUTES
 // ========================
-router.get("/enrolled-courses", getAllMyEnrolledCourses)
-router.get("/my-mentor-sessions", getMyAllMentorSessions)
-router.get("/my-applications", getMyAllApplications)
-router.get("/my-payments", getAllMyPayments)
+router.get("/enrolled-courses",authMiddleware, getAllMyEnrolledCourses)
+router.get("/my-mentor-sessions",authMiddleware, getMyAllMentorSessions)
+router.get("/my-applications",authMiddleware, getMyAllApplications)
+router.get("/my-payments",authMiddleware, getAllMyPayments)
 
 
 
-
-// 
 
 
 
