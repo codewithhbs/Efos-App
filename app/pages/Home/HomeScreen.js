@@ -214,33 +214,7 @@ export default function HomeScreen({ navigation }) {
           </View>
         </Animated.View>
 
-        {/* Search */}
-        <Animated.View style={[styles.searchWrap, { transform: [{ scale: searchScale }] }]}>
-          <LinearGradient
-            colors={searchFocused ? ['rgba(255,255,255,1)', 'rgba(255,255,255,1)'] : ['rgba(255,255,255,0.15)', 'rgba(255,255,255,0.1)']}
-            style={styles.searchBar}
-          >
-            <Ionicons
-              name="search-outline"
-              size={17}
-              color={searchFocused ? COLORS.primary : 'rgba(255,255,255,0.8)'}
-            />
-            <TextInput
-              style={[styles.searchInput, searchFocused && { color: '#111827' }]}
-              placeholder="Search courses, topics..."
-              placeholderTextColor={searchFocused ? '#9CA3AF' : 'rgba(255,255,255,0.6)'}
-              value={searchText}
-              onChangeText={setSearchText}
-              onFocus={onSearchFocus}
-              onBlur={onSearchBlur}
-            />
-            {searchText.length > 0 && (
-              <TouchableOpacity onPress={() => setSearchText('')}>
-                <Ionicons name="close-circle" size={16} color={searchFocused ? '#9CA3AF' : 'rgba(255,255,255,0.7)'} />
-              </TouchableOpacity>
-            )}
-          </LinearGradient>
-        </Animated.View>
+
       </LinearGradient>
 
       <ScrollView

@@ -18,9 +18,6 @@ exports.createOrder = async (req, res) => {
             couponCode,
         } = req.body;
 
-        // =================================
-        // VALIDATION
-        // =================================
         if (
             !userId ||
             !courseId ||
@@ -34,9 +31,6 @@ exports.createOrder = async (req, res) => {
             });
         }
 
-        // =================================
-        // COURSE
-        // =================================
         const [courseRows] = await pool.query(
             `SELECT * FROM learning_courses
        WHERE id=? AND status=1
@@ -53,9 +47,6 @@ exports.createOrder = async (req, res) => {
 
         const course = courseRows[0];
 
-        // =================================
-        // PRICE
-        // =================================
         let amount = 0;
 
         if (Number(course.is_free) === 1) {
@@ -73,9 +64,6 @@ exports.createOrder = async (req, res) => {
         let discountAmount = 0;
         let appliedCoupon = null;
 
-        // =================================
-        // CHECK EXISTING BUY ROW
-        // =================================
         const [existingRows] = await pool.query(
             `SELECT id,payment_status
        FROM course_buys
@@ -84,9 +72,6 @@ exports.createOrder = async (req, res) => {
             [userId, courseId]
         );
 
-        // =================================
-        // FREE COURSE DIRECT ENTRY
-        // =================================
         if (amount <= 0) {
             if (existingRows.length > 0) {
                 const row = existingRows[0];
@@ -150,9 +135,6 @@ exports.createOrder = async (req, res) => {
             });
         }
 
-        // =================================
-        // PAID COURSE FLOW
-        // =================================
         const order_id = generateOrderId();
 
         if (existingRows.length > 0) {
@@ -216,9 +198,6 @@ exports.createOrder = async (req, res) => {
             );
         }
 
-        // =================================
-        // CASHFREE ORDER
-        // =================================
         return await initiateCashfreeOrder({
             res,
             course,
@@ -244,6 +223,7 @@ exports.createOrder = async (req, res) => {
         });
     }
 };
+
 // ══════════════════════════════════════════
 // POST /verify-payment
 // body: { order_id, userId }
@@ -259,7 +239,6 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // Fetch local order
         const [orderRows] = await pool.query(
             `SELECT * FROM course_buys
              WHERE transaction_id = ? AND user_id = ? LIMIT 1`,
@@ -275,7 +254,6 @@ exports.verifyPayment = async (req, res) => {
 
         const order = orderRows[0];
 
-        // Already success — skip Cashfree call
         if (order.payment_status === "success") {
             return res.status(200).json({
                 success: true,
@@ -284,7 +262,6 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // Call Cashfree
         const APP_ID = process.env.CASHFREE_API_KEY;
         const SECRET_KEY = process.env.CASHFREE_API_SECRET;
         const MODE = process.env.CASHFREE_MODE;
@@ -316,10 +293,12 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        const latest = payments[payments.length - 1];
+        // FIX: Cashfree returns latest attempt FIRST, not last.
+        // Old code used payments[payments.length - 1] -> picked oldest attempt,
+        // so a failed retry could still read as success/pending wrongly.
+        const latest = payments[0];
         const cfStatus = latest?.payment_status?.toLowerCase();
 
-        // ── SUCCESS ──
         if (cfStatus === "success") {
             await pool.query(
                 `UPDATE course_buys
@@ -338,11 +317,10 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // ── FAILED ──
         if (cfStatus === "failed") {
             await pool.query(
                 `UPDATE course_buys
-                 SET payment_status = 'failed', updated_at = NOW()
+                 SET payment_status = 'failed', is_active = 0, updated_at = NOW()
                  WHERE transaction_id = ? AND user_id = ?`,
                 [order_id, userId]
             );
@@ -354,11 +332,10 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // ── USER DROPPED / CANCELLED ──
         if (cfStatus === "user_dropped" || cfStatus === "cancelled") {
             await pool.query(
                 `UPDATE course_buys
-                 SET payment_status = 'failed', updated_at = NOW()
+                 SET payment_status = 'failed', is_active = 0, updated_at = NOW()
                  WHERE transaction_id = ? AND user_id = ?`,
                 [order_id, userId]
             );
@@ -370,7 +347,6 @@ exports.verifyPayment = async (req, res) => {
             });
         }
 
-        // ── PENDING ──
         return res.status(200).json({
             success: false,
             message: "Payment is still being processed. Please wait and check again.",
@@ -489,14 +465,10 @@ async function initiateCashfreeOrder({
     }
 }
 
-
 exports.getAvailableCoupon = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // ==========================
-        // USER ORDERS CHECK
-        // ==========================
         const [orders] = await pool.query(
             `SELECT COUNT(*) AS totalOrders
        FROM course_buys
@@ -507,9 +479,6 @@ exports.getAvailableCoupon = async (req, res) => {
 
         const totalOrders = Number(orders[0].totalOrders);
 
-        // ==========================
-        // ACTIVE COUPONS
-        // ==========================
         const [coupons] = await pool.query(
             `SELECT *
        FROM coupons
@@ -525,17 +494,11 @@ exports.getAvailableCoupon = async (req, res) => {
             let valid = true;
             let reason = "Available";
 
-            // ==========================
-            // EXPIRED
-            // ==========================
             if (coupon.expires_at && new Date(coupon.expires_at) < new Date()) {
                 valid = false;
                 reason = "Expired";
             }
 
-            // ==========================
-            // USAGE LIMIT
-            // ==========================
             if (
                 coupon.usage_limit &&
                 Number(coupon.used_count) >= Number(coupon.usage_limit)
@@ -544,9 +507,6 @@ exports.getAvailableCoupon = async (req, res) => {
                 reason = "Coupon limit reached";
             }
 
-            // ==========================
-            // FIRST ORDER ONLY
-            // ==========================
             if (
                 Number(coupon.first_order_only) === 1 &&
                 totalOrders > 0
@@ -555,9 +515,6 @@ exports.getAvailableCoupon = async (req, res) => {
                 reason = "Only for first purchase";
             }
 
-            // ==========================
-            // USER TYPE
-            // ==========================
             if (
                 coupon.user_type === "new_user" &&
                 totalOrders > 0
@@ -574,9 +531,6 @@ exports.getAvailableCoupon = async (req, res) => {
                 reason = "Only for existing users";
             }
 
-            // ==========================
-            // PER USER LIMIT
-            // ==========================
             const [usedByUser] = await pool.query(
                 `SELECT COUNT(*) AS totalUsed
          FROM coupon_usages
@@ -622,18 +576,11 @@ exports.getAvailableCoupon = async (req, res) => {
     }
 };
 
-// ======================================
-// APPLY COUPON API 
-// ======================================
-
 exports.applyCoupon = async (req, res) => {
     try {
         const userId = req.user.id;
         const { courseId, couponCode } = req.body;
 
-        // ==========================
-        // VALIDATION
-        // ==========================
         if (!courseId || !couponCode) {
             return res.status(400).json({
                 success: false,
@@ -641,9 +588,6 @@ exports.applyCoupon = async (req, res) => {
             });
         }
 
-        // ==========================
-        // COURSE CHECK
-        // ==========================
         const [courseRows] = await pool.query(
             `SELECT * FROM learning_courses
        WHERE id=? AND status=1
@@ -660,9 +604,6 @@ exports.applyCoupon = async (req, res) => {
 
         const course = courseRows[0];
 
-        // ==========================
-        // PRICE
-        // ==========================
         let originalAmount = 0;
 
         if (Number(course.is_free) === 1) {
@@ -683,9 +624,6 @@ exports.applyCoupon = async (req, res) => {
             });
         }
 
-        // ==========================
-        // COUPON CHECK
-        // ==========================
         const [couponRows] = await pool.query(
             `SELECT * FROM coupons
        WHERE code=?
@@ -705,11 +643,8 @@ exports.applyCoupon = async (req, res) => {
 
         const coupon = couponRows[0];
 
-        // ==========================
-        // MIN ORDER
-        // ==========================
         if (
-            originalAmount <
+            originalAmount ||
             Number(coupon.min_order_amount)
         ) {
             return res.status(400).json({
@@ -721,9 +656,6 @@ exports.applyCoupon = async (req, res) => {
             });
         }
 
-        // ==========================
-        // TOTAL LIMIT
-        // ==========================
         if (
             coupon.usage_limit &&
             Number(coupon.used_count) >=
@@ -735,9 +667,6 @@ exports.applyCoupon = async (req, res) => {
             });
         }
 
-        // ==========================
-        // USER PURCHASE HISTORY
-        // ==========================
         const [orders] = await pool.query(
             `SELECT COUNT(*) AS total
        FROM course_buys
@@ -748,9 +677,6 @@ exports.applyCoupon = async (req, res) => {
 
         const totalOrders = Number(orders[0].total);
 
-        // ==========================
-        // FIRST ORDER ONLY
-        // ==========================
         if (
             Number(coupon.first_order_only) === 1 &&
             totalOrders > 0
@@ -762,9 +688,6 @@ exports.applyCoupon = async (req, res) => {
             });
         }
 
-        // ==========================
-        // USER TYPE
-        // ==========================
         if (
             coupon.user_type === "new_user" &&
             totalOrders > 0
@@ -788,9 +711,6 @@ exports.applyCoupon = async (req, res) => {
             });
         }
 
-        // ==========================
-        // PER USER LIMIT
-        // ==========================
         const [usedRows] = await pool.query(
             `SELECT COUNT(*) AS totalUsed
        FROM coupon_usages
@@ -810,9 +730,6 @@ exports.applyCoupon = async (req, res) => {
             });
         }
 
-        // ==========================
-        // DISCOUNT CALCULATE
-        // ==========================
         let discount = 0;
 
         if (
@@ -848,9 +765,6 @@ exports.applyCoupon = async (req, res) => {
         if (finalAmount < 1)
             finalAmount = 1;
 
-        // ==========================
-        // RESPONSE
-        // ==========================
         return res.status(200).json({
             success: true,
             message: "Coupon applied successfully",
@@ -884,16 +798,11 @@ exports.applyCoupon = async (req, res) => {
     }
 };
 
-
-
 exports.getAllMyEnrolledCourses = async (req, res) => {
     try {
         const userId = req.user.id;
         const baseUrl = process.env.APP_API_URL || "";
 
-        // ======================================
-        // Query Params
-        // ======================================
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
         const status =
@@ -903,9 +812,6 @@ exports.getAllMyEnrolledCourses = async (req, res) => {
 
         const offset = (page - 1) * limit;
 
-        // ======================================
-        // Dynamic Where Clause
-        // ======================================
         let whereClause = `
       WHERE cb.user_id = ?
       AND lc.status = 1
@@ -932,9 +838,6 @@ exports.getAllMyEnrolledCourses = async (req, res) => {
             );
         }
 
-        // ======================================
-        // Total Count
-        // ======================================
         const [countRows] = await pool.query(
             `
       SELECT COUNT(*) AS total
@@ -951,9 +854,6 @@ exports.getAllMyEnrolledCourses = async (req, res) => {
             total / limit
         );
 
-        // ======================================
-        // Main Data
-        // ======================================
         const [rows] = await pool.query(
             `
       SELECT 
@@ -981,9 +881,6 @@ exports.getAllMyEnrolledCourses = async (req, res) => {
             [...params, limit, offset]
         );
 
-        // ======================================
-        // Format Thumbnail
-        // ======================================
         const courses = rows.map(item => ({
             ...item,
             thumbnail: item.thumbnail
@@ -1021,15 +918,11 @@ exports.getAllMyEnrolledCourses = async (req, res) => {
     }
 };
 
-
 exports.getMyAllMentorSessions = async (req, res) => {
     try {
         const userId = req.user.id;
         const baseUrl = process.env.APP_API_URL || "";
 
-        // =====================================
-        // Query Params
-        // =====================================
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
 
@@ -1045,9 +938,6 @@ exports.getMyAllMentorSessions = async (req, res) => {
 
         const offset = (page - 1) * limit;
 
-        // =====================================
-        // Get Student Profile
-        // =====================================
         const [[student]] = await pool.query(
             `SELECT id
        FROM students
@@ -1064,9 +954,6 @@ exports.getMyAllMentorSessions = async (req, res) => {
             });
         }
 
-        // =====================================
-        // Where Clause
-        // =====================================
         let whereClause = `
       WHERE sb.student_id = ?
     `;
@@ -1101,9 +988,6 @@ exports.getMyAllMentorSessions = async (req, res) => {
             );
         }
 
-        // =====================================
-        // Total Count
-        // =====================================
         const [countRows] = await pool.query(
             `
       SELECT COUNT(*) AS total
@@ -1120,9 +1004,6 @@ exports.getMyAllMentorSessions = async (req, res) => {
             total / limit
         );
 
-        // =====================================
-        // Main Query
-        // =====================================
         const [rows] = await pool.query(
             `
       SELECT
@@ -1168,9 +1049,6 @@ exports.getMyAllMentorSessions = async (req, res) => {
             [...params, limit, offset]
         );
 
-        // =====================================
-        // Format Image URL
-        // =====================================
         const sessions = rows.map(item => ({
             ...item,
             mentor_photo: item.mentor_photo
@@ -1178,9 +1056,6 @@ exports.getMyAllMentorSessions = async (req, res) => {
                 : null
         }));
 
-        // =====================================
-        // Response
-        // =====================================
         return res.status(200).json({
             success: true,
             message:
@@ -1215,14 +1090,10 @@ exports.getMyAllMentorSessions = async (req, res) => {
     }
 };
 
-
 exports.getMyAllApplications = async (req, res) => {
     try {
         const userId = req.user.id;
 
-        // =====================================
-        // Query Params
-        // =====================================
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
 
@@ -1234,9 +1105,6 @@ exports.getMyAllApplications = async (req, res) => {
 
         const offset = (page - 1) * limit;
 
-        // =====================================
-        // Get Student Profile
-        // =====================================
         const [[student]] = await pool.query(
             `SELECT id
        FROM students
@@ -1253,9 +1121,6 @@ exports.getMyAllApplications = async (req, res) => {
             });
         }
 
-        // =====================================
-        // Where Clause
-        // =====================================
         let whereClause = `
       WHERE ja.student_id = ?
     `;
@@ -1289,9 +1154,6 @@ exports.getMyAllApplications = async (req, res) => {
             );
         }
 
-        // =====================================
-        // Total Count
-        // =====================================
         const [countRows] = await pool.query(
             `
       SELECT COUNT(*) AS total
@@ -1305,9 +1167,6 @@ exports.getMyAllApplications = async (req, res) => {
         const totalPages =
             Math.ceil(total / limit) || 1;
 
-        // =====================================
-        // Main Query
-        // =====================================
         const [rows] = await pool.query(
             `
       SELECT
@@ -1348,9 +1207,6 @@ exports.getMyAllApplications = async (req, res) => {
             [...params, limit, offset]
         );
 
-        // =====================================
-        // Response
-        // =====================================
         return res.status(200).json({
             success: true,
             message:
@@ -1389,15 +1245,11 @@ exports.getAllMyPayments = async (req, res) => {
         const userId = req.user.id;
         const baseUrl = process.env.APP_API_URL || "";
 
-        // =====================================
-        // Query Params
-        // =====================================
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
 
         const type =
             req.query.type?.trim() || "all";
-        // all | course | session
 
         const payment_status =
             req.query.payment_status?.trim() ||
@@ -1410,9 +1262,6 @@ exports.getAllMyPayments = async (req, res) => {
 
         let payments = [];
 
-        // =====================================
-        // COURSE PAYMENTS
-        // =====================================
         if (type === "all" || type === "course") {
             let whereCourse = `
         WHERE cb.user_id = ?
@@ -1472,9 +1321,6 @@ exports.getAllMyPayments = async (req, res) => {
             );
         }
 
-        // =====================================
-        // SESSION PAYMENTS
-        // =====================================
         if (type === "all" || type === "session") {
             const [[student]] = await pool.query(
                 `SELECT id
@@ -1553,18 +1399,12 @@ exports.getAllMyPayments = async (req, res) => {
             }
         }
 
-        // =====================================
-        // Sort Latest First
-        // =====================================
         payments.sort(
             (a, b) =>
                 new Date(b.paid_at) -
                 new Date(a.paid_at)
         );
 
-        // =====================================
-        // Pagination
-        // =====================================
         const total = payments.length;
         const totalPages =
             Math.ceil(total / limit) || 1;
@@ -1575,9 +1415,6 @@ exports.getAllMyPayments = async (req, res) => {
                 offset + limit
             );
 
-        // =====================================
-        // Response
-        // =====================================
         return res.status(200).json({
             success: true,
             message:
@@ -1611,4 +1448,3 @@ exports.getAllMyPayments = async (req, res) => {
         });
     }
 };
-

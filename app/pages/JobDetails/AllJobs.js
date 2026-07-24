@@ -167,18 +167,10 @@ const JobCard = memo(({ item, onPress, onBookmark, bookmarked }) => {
                         defaultSource={{ uri: "https://via.placeholder.com/54" }}
                     />
                     <View style={{ flex: 1, marginLeft: 12 }}>
-                        <Text numberOfLines={1} style={styles.jobTitle}>{item.title}</Text>
+                        <Text numberOfLines={3} style={styles.jobTitle}>{item.title}</Text>
                         <Text numberOfLines={1} style={styles.company}>{item.company_name}</Text>
                     </View>
-                    <TouchableOpacity onPress={onBk} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                        <Animated.View style={{ transform: [{ scale: bkScale }] }}>
-                            <Ionicons
-                                name={bookmarked ? "bookmark" : "bookmark-outline"}
-                                size={20}
-                                color={bookmarked ? T.red : T.light}
-                            />
-                        </Animated.View>
-                    </TouchableOpacity>
+                 
                 </View>
 
                 {/* Description */}
@@ -553,7 +545,7 @@ const styles = StyleSheet.create({
     },
     cardTop: { flexDirection: "row", alignItems: "flex-start" },
     logo: {
-        width: 52, height: 52, borderRadius: 14,
+        width: 65, height: 65, borderRadius: 14,
         backgroundColor: "#f4f4f6",
         borderWidth: 1, borderColor: T.border,
     },

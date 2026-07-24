@@ -612,36 +612,66 @@ exports.getAppEvents = async (req, res) => {
   }
 }
 
-
 exports.getBlogs = async (req, res) => {
   try {
-    const { page = 1, limit = 10, forHome } = req.query;
+    const {
+      page = 1,
+      limit = 10,
+      forHome,
+      category_id,
+      search,
+    } = req.query;
+
+    let whereClause = `WHERE b.status = 1`;
+    const params = [];
+
+    // Category Filter
+    if (category_id) {
+      whereClause += ` AND b.category_id = ?`;
+      params.push(category_id);
+    }
+
+    // Search Filter
+    if (search && search.trim()) {
+      whereClause += `
+        AND (
+          b.name LIKE ?
+          OR b.short_content LIKE ?
+          OR b.slug LIKE ?
+        )
+      `;
+
+      const keyword = `%${search.trim()}%`;
+      params.push(keyword, keyword, keyword);
+    }
 
     let sql = `
       SELECT
-        id,
-        category_id,
-        user_id,
-        name,
-        slug,
-        short_content,
-        image,
-        created_at
-      FROM blogs
-      WHERE status = 1
+        b.id,
+        b.category_id,
+        b.user_id,
+        b.name,
+        b.slug,
+        b.short_content,
+        b.image,
+        b.created_at,
+        c.name AS category_name,
+        c.slug AS category_slug
+      FROM blogs b
+      LEFT JOIN categories c
+        ON c.id = b.category_id
+      ${whereClause}
     `;
 
-    let params = [];
-
-    // Home API -> return latest 10 blogs
+    // Home API
     if (forHome === "true") {
-      sql += ` ORDER BY id DESC LIMIT 10`;
+      sql += ` ORDER BY b.id DESC LIMIT 10`;
     } else {
       const pageNum = Math.max(parseInt(page, 10) || 1, 1);
       const limitNum = Math.max(parseInt(limit, 10) || 10, 1);
       const offset = (pageNum - 1) * limitNum;
 
-      sql += ` ORDER BY id DESC LIMIT ? OFFSET ?`;
+      sql += ` ORDER BY b.id DESC LIMIT ? OFFSET ?`;
       params.push(limitNum, offset);
     }
 
@@ -654,23 +684,62 @@ exports.getBlogs = async (req, res) => {
         : null,
     }));
 
-    // For Home API, no pagination metadata
+    // Categories having active blogs only
+    const [categories] = await pool.query(`
+      SELECT
+        c.id,
+        c.name,
+        c.slug,
+        COUNT(b.id) AS blog_count
+      FROM categories c
+      INNER JOIN blogs b
+        ON b.category_id = c.id
+      WHERE
+        c.status = 1
+        AND b.status = 1
+      GROUP BY
+        c.id,
+        c.name,
+        c.slug
+      ORDER BY
+        c.name ASC
+    `);
+
+    // Home Response
     if (forHome === "true") {
       return res.status(200).json({
         success: true,
         message: "Blogs fetched successfully.",
+        categories,
         data,
       });
     }
 
-    // Pagination metadata
+    // Count Query
+    const countParams = [];
+
+    if (category_id) {
+      countParams.push(category_id);
+    }
+
+    if (search && search.trim()) {
+      const keyword = `%${search.trim()}%`;
+      countParams.push(keyword, keyword, keyword);
+    }
+
     const [[{ total }]] = await pool.query(
-      `SELECT COUNT(*) AS total FROM blogs WHERE status = 1`
+      `
+      SELECT COUNT(*) AS total
+      FROM blogs b
+      ${whereClause}
+      `,
+      countParams
     );
 
     return res.status(200).json({
       success: true,
       message: "Blogs fetched successfully.",
+      categories,
       data,
       pagination: {
         total,

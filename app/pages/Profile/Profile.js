@@ -44,13 +44,7 @@ const MENU_SECTIONS = [
                 label: "Applied Opportunities",
                 color: "#10B981",
                 route: "applications",
-            },
-            {
-                icon: "person-circle-outline",
-                label: "My Profile",
-                color: "#0EA5E9",
-                route: "Profile",
-            },
+            }
         ],
     },
 
@@ -68,7 +62,7 @@ const MENU_SECTIONS = [
                 label: "Notifications",
                 color: "#EC4899",
                 route: "Notifications",
-                badge: "3",
+
             },
         ],
     },
@@ -104,7 +98,7 @@ export function ProfileScreen({ navigation }) {
         stats,
         fetchProfile,
     } = useAuthStore();
-    console.log(student)
+
 
     const [loggingOut, setLoggingOut] = useState(false);
 
@@ -419,7 +413,7 @@ export function ProfileScreen({ navigation }) {
                                 <View style={styles.roleDot} />
 
                                 <Text style={styles.rolePillText}>
-                                    {user?.role || "Student"}
+                                    {student?.present_status || user?.role || "Student"}
                                 </Text>
 
                             </View>
