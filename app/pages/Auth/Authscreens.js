@@ -3,15 +3,14 @@ import {
   View, Text, StyleSheet, TouchableOpacity, TouchableWithoutFeedback,
   TextInput, ScrollView, KeyboardAvoidingView, Platform, Alert,
   ActivityIndicator, Animated, Dimensions, StatusBar, Keyboard,
-  Image, Pressable, LayoutAnimation, UIManager
+  Image, Pressable, LayoutAnimation, UIManager, Linking
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
 import { LinearGradient } from "expo-linear-gradient";
 import useAuthStore from "../../store/useAuthStore";
+import API from "../../utils/axiosInstanct";
 import {
-  STATE_OPTIONS,
-  getDistrictOptions,
   AGE_GROUP_OPTIONS,
   GENDER_OPTIONS,
   QUALIFICATION_OPTIONS,
@@ -49,6 +48,55 @@ const C = {
 
 const F = { xs: 11, sm: 13, base: 14, md: 15, lg: 17, xl: 20, xxl: 26 };
 
+const LEGAL_LINKS = [
+  { icon: "shield-checkmark-outline", label: "Privacy Policy", color: "#10B981", link: "https://efos.in/privacy-policy" },
+  { icon: "document-text-outline", label: "Terms & Conditions", color: "#F59E0B", link: "https://efos.in/terms-and-conditions" },
+];
+
+// ─── STATE/DISTRICT API HOOK ──────────────────────────────────
+function useLocations(currentState) {
+  const [states, setStates] = useState([]);
+  const [districtsCache, setDistrictsCache] = useState({});
+  const [districtsLoading, setDistrictsLoading] = useState(false);
+
+  useEffect(() => {
+    API.get("/extra/states")
+      .then((res) => {
+        if (res.data?.success) {
+          setStates(res.data.data.map((v) => ({ label: v, value: v })));
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const fetchDistricts = async (state) => {
+    if (!state || districtsCache[state]) return;
+    setDistrictsLoading(true);
+    try {
+      const res = await API.get(`/extra/districts/${state}`);
+      if (res.data?.success) {
+        setDistrictsCache((prev) => ({
+          ...prev,
+          [state]: res.data.data.map((v) => ({ label: v, value: v })),
+        }));
+      }
+    } catch {}
+    finally {
+      setDistrictsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentState) fetchDistricts(currentState);
+  }, [currentState]);
+
+  return {
+    states,
+    districts: districtsCache[currentState] || [],
+    districtsLoading,
+  };
+}
+
 // ─── KEYBOARD SAFE WRAPPER ────────────────────────────────────
 function KBSafe({ children, bottomPad = 140, scrollRef }) {
   return (
@@ -84,6 +132,27 @@ function Brand({ title, sub }) {
       />
       <Text style={s.brandTitle}>{title}</Text>
       <Text style={s.brandSub}>{sub}</Text>
+    </View>
+  );
+}
+
+// ─── LEGAL LINKS FOOTER ─────────────────────────────────────────
+function LegalLinks() {
+  return (
+    <View style={s.legalRow}>
+      {LEGAL_LINKS.map((item, i) => (
+        <React.Fragment key={item.label}>
+          <TouchableOpacity
+            style={s.legalItem}
+            onPress={() => Linking.openURL(item.link)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name={item.icon} size={13} color={item.color} />
+            <Text style={[s.legalTxt, { color: item.color }]}>{item.label}</Text>
+          </TouchableOpacity>
+          {i < LEGAL_LINKS.length - 1 && <View style={s.legalDot} />}
+        </React.Fragment>
+      ))}
     </View>
   );
 }
@@ -182,15 +251,14 @@ function Field({
 function SelectField({
   label, required, icon, placeholder = "Select",
   value, onValueChange, options = [], error, disabled = false,
-  searchable = false,          // set true for long lists (State)
+  searchable = false, loading = false,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
 
   const selected = options.find((o) => o.value === value);
-  const locked = disabled || !options.length;
+  const locked = disabled || loading || !options.length;
 
-  // close if options change out from under it (state → district reset)
   useEffect(() => {
     setOpen(false);
     setQuery("");
@@ -244,14 +312,18 @@ function SelectField({
           style={[s.fieldInput, { color: selected ? C.text : C.textLight }]}
           numberOfLines={1}
         >
-          {selected ? selected.label : placeholder}
+          {loading ? "Loading..." : selected ? selected.label : placeholder}
         </Text>
 
-        <Ionicons
-          name={open ? "chevron-up" : "chevron-down"}
-          size={16}
-          color={open ? C.primary : C.textLight}
-        />
+        {loading ? (
+          <ActivityIndicator size="small" color={C.primary} />
+        ) : (
+          <Ionicons
+            name={open ? "chevron-up" : "chevron-down"}
+            size={16}
+            color={open ? C.primary : C.textLight}
+          />
+        )}
       </Pressable>
 
       {open && (
@@ -661,6 +733,8 @@ export function LoginScreen({ navigation }) {
               <Text style={s.switchLink}>Create account</Text>
             </TouchableOpacity>
           </View>
+
+          <LegalLinks />
         </View>
       </KBSafe>
     </SafeAreaView>
@@ -698,7 +772,7 @@ export function SignupScreen({ navigation }) {
   const { register, verifyRegisterOtp, resendRegisterOtp } = useAuthStore();
   const scrollRef = useRef(null);
 
-  const districtOptions = useMemo(() => getDistrictOptions(form.state), [form.state]);
+  const { states, districts, districtsLoading } = useLocations(form.state);
 
   const set = (key, value) => {
     setForm((f) =>
@@ -932,7 +1006,7 @@ export function SignupScreen({ navigation }) {
                       placeholder="Select State"
                       value={form.state}
                       onValueChange={(v) => set("state", v)}
-                      options={STATE_OPTIONS}
+                      options={states}
                       error={errors.state}
                       searchable
                     />
@@ -945,8 +1019,9 @@ export function SignupScreen({ navigation }) {
                       placeholder={form.state ? "Select District" : "Pick state first"}
                       value={form.district}
                       onValueChange={(v) => set("district", v)}
-                      options={districtOptions}
+                      options={districts}
                       disabled={!form.state}
+                      loading={districtsLoading}
                       error={errors.district}
                       searchable
                     />
@@ -1043,6 +1118,8 @@ export function SignupScreen({ navigation }) {
               <Text style={s.switchLink}>Sign in</Text>
             </TouchableOpacity>
           </View>
+
+          <LegalLinks />
         </View>
       </KBSafe>
     </SafeAreaView>
@@ -1358,6 +1435,22 @@ const s = StyleSheet.create({
   brandTitle: { fontSize: 26, fontWeight: "800", color: C.text, marginBottom: 6, textAlign: "center", letterSpacing: -0.3 },
   brandSub: { fontSize: F.sm, color: C.textSec, textAlign: "center", lineHeight: 20 },
 
+  // Legal footer
+  legalRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 18,
+    marginBottom: 6,
+    flexWrap: "wrap",
+  },
+  legalItem: { flexDirection: "row", alignItems: "center", gap: 5, paddingVertical: 4 },
+  legalTxt: { fontSize: F.xs, fontWeight: "700" },
+  legalDot: {
+    width: 3, height: 3, borderRadius: 2,
+    backgroundColor: C.textLight, marginHorizontal: 10,
+  },
+
   // Card
   card: {
     backgroundColor: C.card,
@@ -1398,8 +1491,6 @@ const s = StyleSheet.create({
 
   hintTxt: { fontSize: F.sm, color: C.textSec, textAlign: "center", lineHeight: 20 },
   linkTxt: { fontSize: F.sm, color: "#0A84FF", fontWeight: "600" },
-
-  // Picker bottom sheet
 
   fieldBoxOpen: {
     borderBottomLeftRadius: 0,

@@ -82,6 +82,24 @@ const MENU_SECTIONS = [
                 color: "#3B82F6",
                 link: "https://efos.in/our-story",
             },
+            {
+                icon: "shield-checkmark-outline",
+                label: "Privacy Policy",
+                color: "#10B981",
+                link: "https://efos.in/privacy-policy",
+            },
+            {
+                icon: "document-text-outline",
+                label: "Terms & Conditions",
+                color: "#F59E0B",
+                link: "https://efos.in/terms-and-conditions",
+            },
+            {
+                icon: "refresh-circle-outline",
+                label: "Refund & Cancellation",
+                color: "#EF4444",
+                link: "https://efos.in/refund-and-cancellation-policy",
+            },
         ],
     },
 ];
