@@ -34,8 +34,7 @@ import {
     C,
 } from "../../components/FormFields";
 import {
-    STATE_OPTIONS,
-    getDistrictOptions,
+  
     AGE_GROUP_OPTIONS,
     GENDER_OPTIONS,
     QUALIFICATION_OPTIONS,
@@ -140,6 +139,41 @@ export default function ResumeBuilder({ navigation }) {
     const [loading, setLoading] = useState(false);
     const [generating, setGenerating] = useState(false);
     const [experiences, setExperiences] = useState([]);
+
+    const [states, setStates] = useState([]);
+    const [districtsCache, setDistrictsCache] = useState({});
+    const [districtsLoading, setDistrictsLoading] = useState(false);
+
+    useEffect(() => {
+        API.get('/extra/states').then(res => {
+            if (res.data?.success) {
+                setStates(res.data.data.map(s => ({ label: s, value: s })));
+            }
+        }).catch(() => { });
+    }, []);
+
+
+    const fetchDistricts = useCallback(async (state) => {
+        if (!state || districtsCache[state]) return;
+        setDistrictsLoading(true);
+        try {
+            const res = await API.get(`/extra/districts/${state}`);
+            if (res.data?.success) {
+                setDistrictsCache(prev => ({
+                    ...prev,
+                    [state]: res.data.data.map(d => ({ label: d, value: d })),
+                }));
+            }
+        } catch { }
+        finally { setDistrictsLoading(false); }
+    }, [districtsCache]);
+
+
+
+    useEffect(() => {
+        if (form.state) fetchDistricts(form.state);
+    }, [form.state]);
+
     const isExp = (t) => !!t && t !== "Fresher";
     useEffect(() => { fetchProfile(); }, []);
     // console.log(student)
@@ -160,11 +194,8 @@ export default function ResumeBuilder({ navigation }) {
         }
     }, [student]);
 
-    const districtOptions = useMemo(
-        () => getDistrictOptions(form.state),
-        [form.state]
-    );
-
+    // ── replace old districtOptions useMemo ──
+    const districtOptions = districtsCache[form.state] || [];
     // qualification-aware completion check
     const stepStatus = useMemo(
         () =>
@@ -323,7 +354,7 @@ export default function ResumeBuilder({ navigation }) {
 
         const location = [f.address, f.district, f.state].filter(Boolean).join(", ");
 
-      
+
         const expList = experiences.filter((e) => e.company_name?.trim() || e.job_profile?.trim());
         const expHtml = expList
             .map((e) => {
@@ -535,9 +566,9 @@ export default function ResumeBuilder({ navigation }) {
   </div>
   <div class="hero-photo">
     ${(() => {
-      const avatarUri = photo?.uri || (student?.photo ? `https://api.epinfoways.com/${student.photo}` : "");
-      return avatarUri ? `<img class="avatar" src="${avatarUri}" />` : "";
-    })()}
+                const avatarUri = photo?.uri || (student?.photo ? `https://api.epinfoways.com/${student.photo}` : "");
+                return avatarUri ? `<img class="avatar" src="${avatarUri}" />` : "";
+            })()}
   </div>
 </div>
   ${chips.length ? `<div class="chips">${chips.map((c) => `<span class="chip">${c}</span>`).join("")}</div>` : ""}
@@ -691,16 +722,16 @@ export default function ResumeBuilder({ navigation }) {
 
                         <Row>
                             <Col>
-                                <SelectField label="State" required icon="map-outline" searchable
-                                    placeholder="Select State"
-                                    value={form.state} onValueChange={(v) => set("state", v)}
-                                    options={STATE_OPTIONS} error={errors.state} />
+                              <SelectField label="State" required icon="map-outline" searchable
+    placeholder="Select State"
+    value={form.state} onValueChange={(v) => set("state", v)}
+    options={states} error={errors.state} />
                             </Col>
                             <Col>
-                                <SelectField label="District" required icon="location-outline" searchable
-                                    placeholder={form.state ? "Select District" : "Pick state first"}
-                                    value={form.district} onValueChange={(v) => set("district", v)}
-                                    options={districtOptions} disabled={!form.state} error={errors.district} />
+                            <SelectField label="District" required icon="location-outline" searchable
+    placeholder={form.state ? (districtsLoading ? "Loading..." : "Select District") : "Pick state first"}
+    value={form.district} onValueChange={(v) => set("district", v)}
+    options={districtOptions} disabled={!form.state} error={errors.district} />
                             </Col>
                         </Row>
 
@@ -925,7 +956,7 @@ export default function ResumeBuilder({ navigation }) {
                             <>
                                 <Section title="WORK EXPERIENCE" />
                                 {experiences.map((ex, i) => {
-                                    const dOpts = getDistrictOptions(ex.job_state);
+                                 
                                     return (
                                         <View key={i} style={s.expCard}>
                                             <View style={s.expHead}>
@@ -957,17 +988,17 @@ export default function ResumeBuilder({ navigation }) {
                                             <Row>
                                                 <Col>
                                                     <SelectField label="State" icon="map-outline" searchable
-                                                        placeholder="Select State"
-                                                        value={ex.job_state}
-                                                        onValueChange={(v) => { setExp(i, "job_state", v); setExp(i, "job_district", ""); }}
-                                                        options={STATE_OPTIONS} />
+    placeholder="Select State"
+    value={ex.job_state}
+    onValueChange={(v) => { setExp(i, "job_state", v); setExp(i, "job_district", ""); fetchDistricts(v); }}
+    options={states} />
                                                 </Col>
                                                 <Col>
-                                                    <SelectField label="District" icon="location-outline" searchable
-                                                        placeholder={ex.job_state ? "Select District" : "Pick state first"}
-                                                        value={ex.job_district}
-                                                        onValueChange={(v) => setExp(i, "job_district", v)}
-                                                        options={dOpts} disabled={!ex.job_state} />
+                                                 <SelectField label="District" icon="location-outline" searchable
+    placeholder={ex.job_state ? "Select District" : "Pick state first"}
+    value={ex.job_district}
+    onValueChange={(v) => setExp(i, "job_district", v)}
+    options={districtsCache[ex.job_state] || []} disabled={!ex.job_state} />
                                                 </Col>
                                             </Row>
 

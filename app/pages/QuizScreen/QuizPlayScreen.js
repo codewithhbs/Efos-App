@@ -9,6 +9,7 @@ import {
     Alert,
     Animated,
     StatusBar,
+    Linking,
 
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -146,6 +147,10 @@ function ResultScreen({ result, total, onBack }) {
         }).start();
     }, []);
 
+    const openCertificate = () => {
+        Linking.openURL("https://efos.in/student/login");
+    };
+
     return (
         <SafeAreaView style={styles.container}>
             <StatusBar barStyle="light-content" backgroundColor="#C0392B" />
@@ -178,6 +183,12 @@ function ResultScreen({ result, total, onBack }) {
                         </View>
                     </View>
 
+                    {result.is_passed && (
+                        <TouchableOpacity style={styles.certBtn} onPress={openCertificate} activeOpacity={0.85}>
+                            <Text style={styles.certBtnText}>🎓 Download Certificate</Text>
+                        </TouchableOpacity>
+                    )}
+
                     <TouchableOpacity style={styles.backBtn} onPress={onBack}>
                         <Text style={styles.backBtnText}>Done</Text>
                     </TouchableOpacity>
@@ -186,7 +197,6 @@ function ResultScreen({ result, total, onBack }) {
         </SafeAreaView>
     );
 }
-
 // ─── main screen ───────────────────────────────────────────────────────────────
 
 export default function QuizPlayScreen({ route, navigation }) {
@@ -985,6 +995,20 @@ const styles = StyleSheet.create({
         paddingVertical: 15,
         borderRadius: 14,
         alignItems: "center",
+    },
+    certBtn: {
+        backgroundColor: "#16A34A",
+        paddingVertical: 13,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center",
+        marginTop: 10,
+        width: "100%",
+    },
+    certBtnText: {
+        color: "#fff",
+        fontSize: 15,
+        fontWeight: "800",
     },
 
     backBtnText: {

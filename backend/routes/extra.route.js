@@ -5,6 +5,7 @@ const router = express.Router();
 const notificationController = require("../controllers/notificationController");
 const authMiddleware = require("../middleware/authMiddleware");
 const upload = require("../middleware/multer");
+const { getStates, getDistricts } = require("../controllers/locationController");
 
 router.get("/onboard-slides", getOnBoardingSlides)
 router.post("/onboard-slides", upload.single("onboard"), createOnboardingSlide)
@@ -39,9 +40,12 @@ router.post("/mentors/book-session", authMiddleware, bookSession)
 router.get("/mentors-booking/verify", verifyBookingPayment)
 router.get("/mentors-booking/details/:orderId", authMiddleware, getMyBookingsDetails)
 
+// =====================================
+//       Location routes
+// =====================================
 
-
-
+router.get("/states", getStates);
+router.get("/districts/:state", getDistricts);
 
 router.post("/send", notificationController.sendSingleNotification);
 router.post("/send-bulk", notificationController.sendBulkNotificationController);

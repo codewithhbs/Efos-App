@@ -286,9 +286,7 @@ export default function JobDetail({ route, navigation }) {
 
                 {/* Bottom Bar */}
                 <View style={styles.bottomBar}>
-                    <TouchableOpacity style={styles.saveBtn}>
-                        <Ionicons name="bookmark-outline" size={22} color={COLORS.primary} />
-                    </TouchableOpacity>
+
                     <TouchableOpacity
                         style={[styles.applyBtn, job.is_applied && styles.applyBtnApplied]}
                         onPress={applyJob}
