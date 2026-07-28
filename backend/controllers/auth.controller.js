@@ -437,7 +437,13 @@ exports.loginUser = async (req, res) => {
                 });
             }
 
-            const ok = await bcrypt.compare(password, user.password);
+            let hash = user.password;
+
+if (hash.startsWith("$2y$")) {
+    hash = "$2b$" + hash.slice(4);
+}
+
+const ok = await bcrypt.compare(password, hash);
 
             if (!ok) {
                 return res.status(401).json({
