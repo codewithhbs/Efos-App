@@ -284,7 +284,7 @@ exports.registerUser = async (req, res) => {
             ]
         );
 
-        const otp = ();
+    const otp = generateOTP();
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
         await connection.query(
