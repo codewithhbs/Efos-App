@@ -65,6 +65,7 @@ const SENDER_ID = "EFOSed";
 const ENTITY_ID = "1701175455014896701";
 const TEMPLATE_ID = "1707178099233302493";
 
+//New Otp
 const sendDltOtp = async (mobileNumber, otp) => {
   try {
     const message = `Your OTP for EFOS EDUMARKETERS PRIVATE LIMITED login is ${otp}.This OTP is valid for 10 minutes only. Do not share this OTP with anyone.`;
