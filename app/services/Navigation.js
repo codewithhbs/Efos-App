@@ -6,6 +6,8 @@ import { createStackNavigator } from "@react-navigation/stack"
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs"
 import { Ionicons } from "@expo/vector-icons"
 import { COLORS } from "../utils/dummyData"
+import * as Linking from "expo-linking";
+
 
 // Screens
 import SplashScreen from "../screen/SplashScreen"
@@ -46,6 +48,144 @@ import { NotificationsScreen } from "../pages/extra/NotificationsScreen"
 import AllBlogs from "../pages/Home/AllBlogs"
 import DetailsBlogs from "../pages/Home/DetailsBlogs"
 
+
+const linking = {
+  prefixes: [
+    Linking.createURL("/"),
+    "efos://",
+  ],
+
+  config: {
+    screens: {
+      Splash: "splash",
+      Onboarding: "onboarding",
+      Login: "login",
+      Signup: "signup",
+      OTP: "otp",
+      ForgotPassword: "forgot-password",
+
+      Main: {
+        screens: {
+          Home: "home",
+          Courses: "courses",
+          Mentors: "mentors",
+          Tests: "opportunities",
+          Profile: "profile",
+        },
+      },
+
+      // Courses
+      CourseDetail: {
+        path: "courses/:courseId",
+        parse: {
+          courseId: (id) => id,
+        },
+      },
+
+      // Opportunities
+      Jobs: "opportunities",
+
+      JobDetail: {
+        path: "opportunities/:jobId",
+        parse: {
+          jobId: (id) => id,
+        },
+      },
+
+      // Mentors
+      MentorDetails: {
+        path: "mentors/:mentorId",
+        parse: {
+          mentorId: (id) => id,
+        },
+      },
+
+      BookSessionWithMentor: {
+        path: "mentors/book/:mentorId",
+        parse: {
+          mentorId: (id) => id,
+        },
+      },
+
+      BookingSuccess: "mentors/success",
+
+      // Blogs
+      AllBlogs: "blogs",
+
+      DetailsBlogs: {
+        path: "blogs/:blogId",
+        parse: {
+          blogId: (id) => id,
+        },
+      },
+
+      // Resume
+      ResumeBuilder: "resume-builder",
+
+      // Notifications
+      Notifications: "notifications",
+
+      // Settings
+      Settings: "settings",
+
+      // My Courses
+      AllMyCourses: "my-courses",
+
+      // Mentor Bookings
+      AllMentorsBookings: "mentor-bookings",
+
+      // Applications
+      applications: "applications",
+
+      // Payments
+      Payments: "payments",
+
+      // Bundle Courses
+      BundleCoursesScreen: "bundle-courses",
+
+      BundleDetails: {
+        path: "bundle-courses/:bundleId",
+        parse: {
+          bundleId: (id) => id,
+        },
+      },
+
+      MyBundleCourses: "my-bundle-courses",
+
+      // Quiz
+      QuizScreen: "quiz",
+
+      QuizDetails: {
+        path: "quiz/:quizId",
+        parse: {
+          quizId: (id) => id,
+        },
+      },
+
+      // Lecture Player
+      LecturePlayer: {
+        path: "lecture/:lectureId",
+        parse: {
+          lectureId: (id) => id,
+        },
+      },
+
+      Classroom: {
+        path: "classroom/:classId",
+        parse: {
+          classId: (id) => id,
+        },
+      },
+
+      StudentProfile: {
+        path: "student/:studentId",
+        parse: {
+          studentId: (id) => id,
+        },
+      },
+    },
+  },
+};
 
 const Stack = createStackNavigator()
 const Tab = createBottomTabNavigator()

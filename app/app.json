@@ -2,59 +2,95 @@
   "expo": {
     "name": "EFOS",
     "slug": "efos-app",
-    "version": "1.0.0",
+    "version": "3.32.6",
     "orientation": "portrait",
     "icon": "./assets/adaptive-icon.png",
+    "scheme": "efos",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+
     "splash": {
       "image": "./assets/ic_launcher.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
+
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.efos.courses",
       "icon": "./assets/adaptive-icon.png",
       "googleServicesFile": "./GoogleService-Info.plist",
+
+      "associatedDomains": [
+        "applinks:www.efos.in",
+        "applinks:efos.in"
+      ],
+
       "infoPlist": {
         "UIBackgroundModes": [
           "fetch"
         ],
         "UIUserNotificationAlertStyle": "alert"
       },
+
       "entitlements": {
         "aps-environment": "development"
       },
+
       "config": {
         "usesNonExemptEncryption": false
       }
     },
+
     "android": {
       "package": "com.efos.courses",
       "usesCleartextTraffic": true,
+
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
+
       "googleServicesFile": "./google-services.json",
+
       "blockedPermissions": [
         "android.permission.READ_MEDIA_IMAGES",
         "android.permission.READ_MEDIA_VIDEO",
         "android.permission.READ_EXTERNAL_STORAGE"
       ],
+
       "permissions": [
         "POST_NOTIFICATIONS",
         "VIBRATE"
       ],
+
       "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": false,
+          "data": [
+            {
+              "scheme": "efos"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
+        },
         {
           "action": "VIEW",
           "autoVerify": true,
           "data": [
             {
               "scheme": "https",
-              "host": "com.efos.courses"
+              "host": "www.efos.in",
+              "pathPrefix": "/"
+            },
+            {
+              "scheme": "https",
+              "host": "efos.in",
+              "pathPrefix": "/"
             }
           ],
           "category": [
@@ -63,11 +99,14 @@
           ]
         }
       ],
+
       "edgeToEdgeEnabled": true,
+
       "notification": {
         "icon": "./assets/ic_launcher.webp",
         "color": "#FB2B37",
         "priority": "max",
+
         "channels": [
           {
             "id": "default",
@@ -112,13 +151,16 @@
         ]
       }
     },
+
     "web": {
       "favicon": "./assets/adaptive-icon.png"
     },
+
     "plugins": [
       "expo-font",
       "expo-secure-store",
       "expo-video",
+
       [
         "expo-notifications",
         {
@@ -126,6 +168,7 @@
           "color": "#FB2B37"
         }
       ],
+
       [
         "expo-build-properties",
         {
@@ -138,11 +181,13 @@
         }
       ]
     ],
+
     "extra": {
       "eas": {
         "projectId": "380e3e33-6978-4d33-aad5-85dfd9dfa8e7"
       }
     },
+
     "owner": "hbsdevelopersteam"
   }
 }

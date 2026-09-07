@@ -27,6 +27,7 @@ import JobCard from '../../components/HomeComponents/JobCard';
 import ResumeFab from './ResumeFab';
 import BlogsComponent from './BlogsComponent';
 import { useFocusEffect } from '@react-navigation/native';
+import HomeSlider from './HomeSlider';
 
 const { width } = Dimensions.get('window');
 
@@ -230,6 +231,7 @@ export default function HomeScreen({ navigation }) {
           />
         }
       >
+      <HomeSlider  refreshing={refreshing}  navigation={navigation}/>
         {/* Hero */}
         <HomeHero
           navigation={navigation}

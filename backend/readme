@@ -186,3 +186,52 @@ CREATE TABLE notifications (
         REFERENCES users(id)
         ON DELETE CASCADE
 );
+
+
+
+at 5 sep
+CREATE TABLE home_sliders (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    title VARCHAR(255) NULL,
+    subtitle VARCHAR(500) NULL,
+    image_url VARCHAR(500) NOT NULL,
+    button_text VARCHAR(100) NULL,
+    button_action VARCHAR(255) NULL,
+    sort_order INT DEFAULT 0,
+    is_active BOOLEAN DEFAULT TRUE,
+    start_date DATETIME NULL,
+    end_date DATETIME NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+INSERT INTO home_sliders
+(title, subtitle, image_url, button_text, button_action, sort_order, is_active)
+VALUES
+(
+    'Build Your Career',
+    'Learn new skills and get ready for your dream career.',
+    'https://api.epinfoways.com/uploads/sliders/career-banner.jpg',
+    'Explore Courses',
+    'Courses',
+    1,
+    1
+),
+(
+    'Find Your Dream Job',
+    'Discover the latest opportunities from top companies.',
+    'https://api.epinfoways.com/uploads/sliders/jobs-banner.jpg',
+    'Find Jobs',
+    'Jobs',
+    2,
+    1
+),
+(
+    'Learn. Grow. Succeed.',
+    'Upgrade your skills with industry-focused learning programs.',
+    'https://api.epinfoways.com/uploads/sliders/learning-banner.jpg',
+    'Start Learning',
+    'Courses',
+    3,
+    1
+);
