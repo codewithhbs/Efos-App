@@ -48,3 +48,5 @@ keys.json
 
 # typescript
 *.tsbuildinfo
+app/ios-build/
+app/build-*.tar.gz
