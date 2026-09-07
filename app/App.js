@@ -4,6 +4,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import * as Notifications from "expo-notifications";
 
+//update expo-notifications to 0.18.1 to avoid the error "Notifications.setNotificationHandler is not a function"
 import Navigation from "./services/Navigation";
 import {
   askAllEssentialPermissions,
