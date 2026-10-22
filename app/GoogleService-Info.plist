@@ -9,7 +9,7 @@
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>com.efos.courses</string>
+	<string>com.efos.course</string>
 	<key>PROJECT_ID</key>
 	<string>efosnew</string>
 	<key>STORAGE_BUCKET</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:554188350566:ios:ab9b8505647921aa6eb9a7</string>
+	<string>1:554188350566:ios:157db68ac30c7c196eb9a7</string>
 </dict>
 </plist>

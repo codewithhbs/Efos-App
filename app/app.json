@@ -2,7 +2,7 @@
   "expo": {
     "name": "EFOS",
     "slug": "efos-app",
-    "version": "3.32.6",
+    "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/adaptive-icon.png",
     "scheme": "efos",
@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.efos.course",
+      "buildNumber": "1",
       "icon": "./assets/adaptive-icon.png",
       "googleServicesFile": "./GoogleService-Info.plist",
       "associatedDomains": [
@@ -28,114 +29,65 @@
         ],
         "UIUserNotificationAlertStyle": "alert"
       },
-      "entitlements": {
-        "aps-environment": "development"
-      },
       "config": {
         "usesNonExemptEncryption": false
       }
     },
-    "android": {
-      "package": "com.efos.courses",
-      "usesCleartextTraffic": true,
-      "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
-      },
-      "googleServicesFile": "./google-services.json",
-      "blockedPermissions": [
-        "android.permission.READ_MEDIA_IMAGES",
-        "android.permission.READ_MEDIA_VIDEO",
-        "android.permission.READ_EXTERNAL_STORAGE"
-      ],
-      "permissions": [
-        "POST_NOTIFICATIONS",
-        "VIBRATE"
-      ],
-      "intentFilters": [
+  
+"android": {
+  "package": "com.efos.courses",
+  "adaptiveIcon": {
+    "foregroundImage": "./assets/adaptive-icon.png",
+    "backgroundColor": "#ffffff"
+  },
+  "googleServicesFile": "./google-services.json",
+  "blockedPermissions": [
+    "android.permission.READ_MEDIA_IMAGES",
+    "android.permission.READ_MEDIA_VIDEO",
+    "android.permission.READ_EXTERNAL_STORAGE"
+  ],
+  "permissions": [
+    "POST_NOTIFICATIONS",
+    "VIBRATE"
+  ],
+  "intentFilters": [
+    {
+      "action": "VIEW",
+      "autoVerify": false,
+      "data": [
         {
-          "action": "VIEW",
-          "autoVerify": false,
-          "data": [
-            {
-              "scheme": "efos"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
-        },
-        {
-          "action": "VIEW",
-          "autoVerify": true,
-          "data": [
-            {
-              "scheme": "https",
-              "host": "www.efos.in",
-              "pathPrefix": "/"
-            },
-            {
-              "scheme": "https",
-              "host": "efos.in",
-              "pathPrefix": "/"
-            }
-          ],
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ]
+          "scheme": "efos"
         }
       ],
-      "edgeToEdgeEnabled": true,
-      "notification": {
-        "icon": "./assets/ic_launcher.webp",
-        "color": "#FB2B37",
-        "priority": "max",
-        "channels": [
-          {
-            "id": "default",
-            "name": "General Notifications",
-            "description": "General updates from EFOS",
-            "importance": "max",
-            "sound": "n_bell"
-          },
-          {
-            "id": "courses",
-            "name": "Course Updates",
-            "description": "New courses, lectures, and content updates",
-            "importance": "max",
-            "sound": "v_bell"
-          },
-          {
-            "id": "assignments",
-            "name": "Assignments & Tests",
-            "description": "Assignments and test notifications",
-            "importance": "max",
-            "sound": "n_bell"
-          },
-          {
-            "id": "liveclasses",
-            "name": "Live Class Alerts",
-            "description": "Reminders for upcoming live classes",
-            "importance": "high",
-            "sound": "v_bell",
-            "vibrationPattern": [
-              400,
-              200,
-              400
-            ]
-          },
-          {
-            "id": "announcements",
-            "name": "Announcements",
-            "description": "Important announcements from EFOS",
-            "importance": "default",
-            "sound": "n_bell"
-          }
-        ]
-      }
+      "category": [
+        "BROWSABLE",
+        "DEFAULT"
+      ]
     },
+    {
+      "action": "VIEW",
+      "autoVerify": true,
+      "data": [
+        {
+          "scheme": "https",
+          "host": "www.efos.in",
+          "pathPrefix": "/"
+        },
+        {
+          "scheme": "https",
+          "host": "efos.in",
+          "pathPrefix": "/"
+        }
+      ],
+      "category": [
+        "BROWSABLE",
+        "DEFAULT"
+      ]
+    }
+  ],
+  "edgeToEdgeEnabled": true
+}
+,
     "web": {
       "favicon": "./assets/adaptive-icon.png"
     },
@@ -156,10 +108,13 @@
           "ios": {
             "useFrameworks": "static",
             "buildReactNativeFromSource": true,
-            "forceStaticLinking": ["RNFBApp", "RNFBMessaging"]
+            "forceStaticLinking": [
+              "RNFBApp",
+              "RNFBMessaging"
+            ]
           }
         }
-      ] ,
+      ],
       "@react-native-firebase/app",
       "@react-native-firebase/messaging"
     ],

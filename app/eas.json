@@ -21,11 +21,19 @@
       "distribution": "internal",
       "ios": { "simulator": true }
     },
-    "production": {
-      "autoIncrement": true
+  "production": {
+      "distribution": "store",
+      "autoIncrement": true,
+  "credentialsSource": "local"
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "info@hovermedia.in", 
+        "ascAppId": "6825653323", 
+        "appleTeamId": "UM556J5XWF" 
+      }
+    }
   }
 }
