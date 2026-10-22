@@ -13,6 +13,8 @@ app/build/
 app/DerivedData/
 DerivedData/
 *.xcarchive
+app/EFOS.app/
+*.dylib
 *.ipa
 *.dSYM
 *.dylib
