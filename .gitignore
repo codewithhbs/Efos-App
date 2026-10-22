@@ -8,7 +8,14 @@ node_modules/
 dist/
 web-build/
 expo-env.d.ts
-
+app/EFOS.app/
+app/build/
+app/DerivedData/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM
+*.dylib
 # Native
 *.orig.*
 *.jks
