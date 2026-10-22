@@ -2,6 +2,8 @@
   "expo.jsEngine": "hermes",
   "EX_DEV_CLIENT_NETWORK_INSPECTOR": "true",
   "newArchEnabled": "true",
-  "ios.forceStaticLinking": "[]",
-  "apple.privacyManifestAggregationEnabled": "true"
+  "ios.useFrameworks": "static",
+  "ios.forceStaticLinking": "[\"RNFBApp\",\"RNFBMessaging\"]",
+  "apple.privacyManifestAggregationEnabled": "true",
+  "ios.buildReactNativeFromSource": "true"
 }

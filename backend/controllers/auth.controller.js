@@ -284,7 +284,7 @@ exports.registerUser = async (req, res) => {
             ]
         );
 
-    const otp = generateOTP();
+        const otp = generateOTP();
         const otpExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
         await connection.query(
@@ -440,11 +440,11 @@ exports.loginUser = async (req, res) => {
 
             let hash = user.password;
 
-if (hash.startsWith("$2y$")) {
-    hash = "$2b$" + hash.slice(4);
-}
+            if (hash.startsWith("$2y$")) {
+                hash = "$2b$" + hash.slice(4);
+            }
 
-const ok = await bcrypt.compare(password, hash);
+            const ok = await bcrypt.compare(password, hash);
 
             if (!ok) {
                 return res.status(401).json({
@@ -464,24 +464,32 @@ const ok = await bcrypt.compare(password, hash);
             });
         }
 
-        // ── OTP MODE ─────────────────────────────────────────────────────
-        const otp = generateOTP();
+
+        // ── OTP MODE ─────────────────────────────────────────────
+        const testMobile = "7217619794";
+        const isTestNumber =
+            toMobile(user.phone)?.toString().replace(/\D/g, "").slice(-10) === testMobile;
+
+        const otp = isTestNumber ? "1234" : generateOTP();
         const expiry = new Date(Date.now() + 10 * 60 * 1000);
 
         await pool.query(
             `UPDATE users
              SET login_otp = ?, login_otp_expiry = ?, fcm_token = ?
              WHERE id = ?`,
-            [otp, expiry, fcm_token, user.id]
+            [otp, expiry, fcm_token || null, user.id]
         );
 
-        const sms = await sendDltOtp(toMobile(user.phone), otp);
+        // Skip SMS only for the test number
+        if (!isTestNumber) {
+            const sms = await sendDltOtp(toMobile(user.phone), otp);
 
-        if (!sms.success) {
-            return res.status(500).json({
-                success: false,
-                message: "Unable to send OTP.",
-            });
+            if (!sms.success) {
+                return res.status(500).json({
+                    success: false,
+                    message: "Unable to send OTP.",
+                });
+            }
         }
 
         return res.json({
@@ -491,6 +499,7 @@ const ok = await bcrypt.compare(password, hash);
             registration_number: user.registration_number,
             message: "OTP sent successfully.",
         });
+
 
     } catch (error) {
         console.error("[loginUser]", error);

@@ -735,6 +735,9 @@ export function LoginScreen({ navigation }) {
           </View>
 
           <LegalLinks />
+          <View style={{flex:1,alignItems:'center'}}>
+            <Text>EFOS EDUMARKETERS PRIVATE LIMITED</Text>
+          </View>
         </View>
       </KBSafe>
     </SafeAreaView>
@@ -1120,6 +1123,9 @@ export function SignupScreen({ navigation }) {
           </View>
 
           <LegalLinks />
+            <View style={{flex:1,alignItems:'center'}}>
+            <Text>EFOS EDUMARKETERS PRIVATE LIMITED</Text>
+          </View>
         </View>
       </KBSafe>
     </SafeAreaView>

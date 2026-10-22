@@ -364,6 +364,9 @@ export default function HomeScreen({ navigation }) {
         )}
 
         <BlogsComponent />
+          <View style={{flex:1,alignItems:'center'}}>
+                    <Text>EFOS EDUMARKETERS PRIVATE LIMITED</Text>
+                  </View>
         <View style={{ height: 32 }} />
       </ScrollView>
       <ResumeFab

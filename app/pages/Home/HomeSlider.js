@@ -41,6 +41,7 @@ export default function HomeSlider({ navigation ,refreshing }) {
 
       if (response.data?.success) {
         const data = response.data.data || []
+        console.log(data)
         setSliders(data)
         currentIndex.current = 0
       }
